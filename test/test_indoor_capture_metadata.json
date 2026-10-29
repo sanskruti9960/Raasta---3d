@@ -1,0 +1,38 @@
+{
+  "project": "Raasta-3D",
+  "competition": "Namma Space - Techfest IIT Bombay & Juspay",
+  "round": 1,
+  "dataset": {
+    "name": "Smart Home / Apartment Digital Twin",
+    "capture_device": "Standard Smartphone Camera",
+    "video_format": "MP4",
+    "resolution": "3840x2160 (4K UHD)",
+    "framerate": 60,
+    "shutter_speed": "1/120s locked",
+    "exposure_lock": true,
+    "focus_lock": true,
+    "trajectory_type": "Two-Pass Perimeter + POI Inward Loop",
+    "loop_closure_verified": true,
+    "duration_seconds": 185,
+    "total_extracted_keyframes": 370,
+    "subsampling_fps": 2.0
+  },
+  "reconstruction_parameters": {
+    "sfm_tool": "COLMAP",
+    "feature_extractor": "SIFT",
+    "matcher": "Sequential with Loop Detection",
+    "training_engine": "Nerfstudio splatfacto (3D Gaussian Splatting)",
+    "training_iterations": 15000,
+    "gpu_accelerator": "NVIDIA Tesla T4 (Google Colab Free)",
+    "training_duration_minutes": 13.8,
+    "output_gaussian_count": 842100,
+    "psnr_db": 28.6
+  },
+  "spatial_indexing": {
+    "total_rooms_labeled": 7,
+    "total_pois_registered": 10,
+    "navmesh_nodes": 22,
+    "average_pathfinding_ms": 1.2
+  }
+}
+

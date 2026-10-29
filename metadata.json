@@ -1,0 +1,7 @@
+{
+  "name": "Raasta-3D",
+  "description": "End-to-end intelligent spatial engine converting smartphone captures of indoor spaces into interactive 3D digital twins with POI search and optimal pathplanning.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

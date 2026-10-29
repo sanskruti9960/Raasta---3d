@@ -1,0 +1,65 @@
+================================================================================
+NAMMA SPACE COMPETITION - TECHFEST, IIT BOMBAY & JUSPAY
+ROUND 1 SUBMISSION: PROOF OF CONCEPT & WEB VIEWER LINK
+================================================================================
+
+Project Title: Raasta-3D - End-to-End Intelligent Spatial Engine
+Team Name: [Your Team Name]
+Lead Contact: [Your Email / Phone]
+Repository: https://github.com/Sarthakadhav/Raasta-3D
+
+--------------------------------------------------------------------------------
+1. PROOF OF CONCEPT LIVE WEB VIEWER
+--------------------------------------------------------------------------------
+Primary Live Viewer Link:
+https://raasta-3d.vercel.app  (or your active Vercel / Netlify deployment link)
+
+Backup / Local Viewer:
+Run locally using:
+$ git clone https://github.com/Sarthakadhav/Raasta-3D.git
+$ cd Raasta-3D
+$ npm install
+$ npm run dev
+Accessible at: http://localhost:5173
+
+--------------------------------------------------------------------------------
+2. FREE-ROAMING & NAVIGATION INSTRUCTIONS FOR EVALUATORS
+--------------------------------------------------------------------------------
+1. Open the web link in any modern browser (Chrome, Edge, Firefox, Safari).
+   No plugins or native installations are required.
+
+2. Exploration Modes:
+   - Walk Mode (First-Person Free Roam):
+     * Click the canvas to lock mouse look.
+     * W / A / S / D keys to walk forward, backward, left, right.
+     * SHIFT to sprint.
+     * C to crouch.
+     * ESC to unlock mouse pointer.
+   - Orbit Mode:
+     * Left click and drag to orbit around the space.
+     * Scroll wheel to zoom in and out.
+     * Right click and drag to pan.
+   - AR Mode:
+     * First-person mobile AR walkthrough simulation with dynamic 360° compass
+       ribbon, center targeting reticle, and 6-DoF SLAM tracking telemetry.
+
+3. Spatial POI Labeling & Room Inspection:
+   - Click directly on any room or zone floor (e.g., Living Room, Kitchen,
+     Bedroom, Study) to reveal its designated name, area, and key furniture.
+   - Click any 3D glowing diamond beacon to inspect the Point of Interest.
+   - Press [Ctrl + K] or click "Search POI" to search by keyword or category.
+   - Click "Navigate Here" to see the active optimal path calculated in real-time.
+
+4. Optimal Desktop Navigation:
+   - The engine automatically routes an animated glowing 3D ribbon along the
+     floor, avoiding physical furniture obstacles (3-seater sofa, tables, beds).
+   - The top Navigation HUD displays real-time turn instructions (e.g., "In 4m,
+     turn left") and estimated walking time.
+   - The bottom-right 2D radar minimap displays player location, heading cone,
+     and the route.
+
+5. Loading Custom Splat Models:
+   - Click "Load Splat" on the top navbar.
+   - Drag and drop any custom .ply, .splat, or .ksplat file into the viewer.
+================================================================================
+

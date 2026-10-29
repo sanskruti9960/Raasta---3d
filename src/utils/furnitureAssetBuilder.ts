@@ -1145,3 +1145,325 @@ export function buildConferenceCabin(
   return { group, collisionBox, meshes };
 }
 
+/**
+ * 12. Architectural Ceramic Potted Plant (Ficus / Monstera):
+ * White ceramic cylinder pot, dark soil, organic green foliage with cast shadows.
+ */
+export function buildPottedPlant(
+  x: number,
+  y: number,
+  z: number,
+  scale = 1.0
+): THREE.Group {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.scale.set(scale, scale, scale);
+
+  const potMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25 });
+  const soilMat = new THREE.MeshStandardMaterial({ color: 0x271c19, roughness: 0.9 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.6, side: THREE.DoubleSide });
+  const darkLeafMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.65, side: THREE.DoubleSide });
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f2e1e, roughness: 0.8 });
+
+  // Ceramic cylindrical pot
+  const potGeo = new THREE.CylinderGeometry(0.24, 0.20, 0.52, 24);
+  const pot = new THREE.Mesh(potGeo, potMat);
+  pot.position.y = 0.26;
+  pot.castShadow = true;
+  pot.receiveShadow = true;
+  group.add(pot);
+
+  // Soil
+  const soilGeo = new THREE.CylinderGeometry(0.23, 0.23, 0.04, 24);
+  const soil = new THREE.Mesh(soilGeo, soilMat);
+  soil.position.y = 0.50;
+  group.add(soil);
+
+  // Central stem
+  const stemGeo = new THREE.CylinderGeometry(0.02, 0.03, 0.7, 8);
+  const stem = new THREE.Mesh(stemGeo, stemMat);
+  stem.position.y = 0.82;
+  stem.castShadow = true;
+  group.add(stem);
+
+  // Leaf fans (Monstera / Ficus leaf shapes)
+  const leafAngles = [0, 0.8, 1.6, 2.4, 3.2, 4.0, 4.8, 5.6];
+  leafAngles.forEach((angle, idx) => {
+    const leafGeo = new THREE.SphereGeometry(0.18, 8, 8);
+    leafGeo.scale(1.2, 0.15, 0.6);
+    const leaf = new THREE.Mesh(leafGeo, idx % 2 === 0 ? leafMat : darkLeafMat);
+    const dist = 0.18 + (idx % 3) * 0.05;
+    leaf.position.set(Math.cos(angle) * dist, 0.75 + (idx * 0.06), Math.sin(angle) * dist);
+    leaf.rotation.y = angle;
+    leaf.rotation.z = (idx % 2 === 0 ? 0.35 : -0.35);
+    leaf.castShadow = true;
+    group.add(leaf);
+  });
+
+  return group;
+}
+
+/**
+ * 13. Mobile Whiteboard Stand:
+ * Modern office rolling whiteboard with aluminum frame, dry-erase board, marker tray.
+ */
+export function buildWhiteboardStand(
+  x: number,
+  y: number,
+  z: number,
+  rotationY = 0
+): THREE.Group {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.rotation.y = rotationY;
+
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.3, metalness: 0.7 });
+  const boardMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15 });
+
+  // Dual vertical uprights
+  [-0.75, 0.75].forEach((ux) => {
+    const upright = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.7, 0.04), frameMat);
+    upright.position.set(ux, 0.85, 0);
+    upright.castShadow = true;
+    group.add(upright);
+
+    // Caster foot
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.55), frameMat);
+    foot.position.set(ux, 0.03, 0);
+    foot.castShadow = true;
+    group.add(foot);
+  });
+
+  // Whiteboard panel (1.4m x 0.95m)
+  const board = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.95, 0.02), boardMat);
+  board.position.set(0, 1.15, 0);
+  board.castShadow = true;
+  group.add(board);
+
+  // Pen tray
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.02, 0.08), frameMat);
+  tray.position.set(0, 0.66, 0.04);
+  group.add(tray);
+
+  return group;
+}
+
+/**
+ * 14. 4-Desk Collaborative Workstation Bench Cluster:
+ * 4 desks (2x2) with warm oak tops, central acoustic felt partition,
+ * 4 laptops with illuminated displays, wire management, and 4 ergonomic chairs.
+ */
+export function buildWorkstationBenchCluster(
+  x: number,
+  y: number,
+  z: number,
+  rotationY = 0,
+  palette: FurniturePalette = {}
+): { group: THREE.Group; collisionBox: THREE.Box3; meshes: THREE.Mesh[] } {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.rotation.y = rotationY;
+  const meshes: THREE.Mesh[] = [];
+
+  const woodColor = palette.woodTone || 0xd4a373; // Warm Oak
+  const frameColor = palette.metal || 0x1e293b;
+  const deskMat = new THREE.MeshStandardMaterial({ color: woodColor, roughness: 0.35, metalness: 0.05 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.4, metalness: 0.8 });
+  const acousticMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.9 }); // Felt divider
+
+  // Desks: 2 north, 2 south (Total footprint ~3.2m wide, 1.6m deep)
+  const deskWidth = 1.5;
+  const deskDepth = 0.75;
+  const deskOffsets = [
+    { dx: -0.8, dz: -0.42, rot: 0 },
+    { dx: 0.8, dz: -0.42, rot: 0 },
+    { dx: -0.8, dz: 0.42, rot: Math.PI },
+    { dx: 0.8, dz: 0.42, rot: Math.PI }
+  ];
+
+  deskOffsets.forEach((pos, idx) => {
+    const top = new THREE.Mesh(new THREE.BoxGeometry(deskWidth, 0.04, deskDepth), deskMat);
+    top.position.set(pos.dx, 0.73, pos.dz);
+    top.castShadow = true;
+    top.receiveShadow = true;
+    top.userData = { name: `Workstation Desk ${idx + 1}`, isObstacle: true };
+    group.add(top);
+    meshes.push(top);
+
+    // Laptop on desk
+    const laptop = buildUltraSlimLaptop(pos.dx, 0.75, pos.dz, pos.rot, palette);
+    group.add(laptop);
+
+    // Ergonomic task chair facing desk
+    const chairZ = pos.dz + (pos.rot === 0 ? -0.55 : 0.55);
+    const chair = buildErgonomicTaskChair(pos.dx, 0, chairZ, pos.rot, { upholstery: 0x334155 });
+    group.add(chair);
+  });
+
+  // Central acoustic partition screen (3.1m wide, 0.42m tall, 0.03m thick)
+  const partition = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.42, 0.03), acousticMat);
+  partition.position.set(0, 0.92, 0);
+  partition.castShadow = true;
+  group.add(partition);
+
+  // Sturdy underframe legs
+  [-1.5, 0, 1.5].forEach((lx) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.72, 1.58), frameMat);
+    leg.position.set(lx, 0.36, 0);
+    leg.castShadow = true;
+    group.add(leg);
+  });
+
+  const collisionBox = new THREE.Box3(
+    new THREE.Vector3(x - 1.8, y, z - 1.2),
+    new THREE.Vector3(x + 1.8, y + 1.2, z + 1.2)
+  );
+
+  return { group, collisionBox, meshes };
+}
+
+/**
+ * 15. Modern Corporate Reception Desk Suite:
+ * Curved/L-shaped oak front counter with LED accent glow, receptionist chair,
+ * dual monitor terminals, and visitor sign-in pad.
+ */
+export function buildReceptionDeskSuite(
+  x: number,
+  y: number,
+  z: number,
+  rotationY = 0,
+  palette: FurniturePalette = {}
+): { group: THREE.Group; collisionBox: THREE.Box3; meshes: THREE.Mesh[] } {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.rotation.y = rotationY;
+  const meshes: THREE.Mesh[] = [];
+
+  const woodColor = palette.woodTone || 0xd4a373; // Oak
+  const oakMat = new THREE.MeshStandardMaterial({ color: woodColor, roughness: 0.35 });
+  const marbleMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2, metalness: 0.05 });
+  const ledGlowMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+
+  // Main counter front (3.2m long, 1.05m high, 0.12m thick)
+  const frontPanel = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.05, 0.12), oakMat);
+  frontPanel.position.set(0, 0.525, 0.38);
+  frontPanel.castShadow = true;
+  frontPanel.userData = { name: 'Reception Counter', isObstacle: true };
+  group.add(frontPanel);
+  meshes.push(frontPanel);
+
+  // Floating marble transaction top
+  const ledge = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.06, 0.36), marbleMat);
+  ledge.position.set(0, 1.08, 0.38);
+  ledge.castShadow = true;
+  group.add(ledge);
+
+  // Subtle LED strip underneath marble ledge
+  const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.015, 0.02), ledGlowMat);
+  ledStrip.position.set(0, 1.04, 0.45);
+  group.add(ledStrip);
+
+  // Working desktop behind counter (3.0m x 0.7m, 0.75m high)
+  const workTop = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.04, 0.7), oakMat);
+  workTop.position.set(0, 0.73, -0.05);
+  workTop.castShadow = true;
+  group.add(workTop);
+
+  // Reception terminal & laptop
+  const laptop = buildUltraSlimLaptop(-0.5, 0.75, -0.05, 0, palette);
+  group.add(laptop);
+
+  // Receptionist chair
+  const chair = buildErgonomicTaskChair(-0.5, 0, -0.65, 0, { upholstery: 0x1e293b });
+  group.add(chair);
+
+  const collisionBox = new THREE.Box3(
+    new THREE.Vector3(x - 1.8, y, z - 0.9),
+    new THREE.Vector3(x + 1.8, y + 1.2, z + 0.6)
+  );
+
+  return { group, collisionBox, meshes };
+}
+
+/**
+ * 16. Breakout Lounge Suite:
+ * Modern minimalist cream/beige sofa, oak low coffee table, armchairs, plush rug.
+ */
+export function buildOfficeLoungeBreakout(
+  x: number,
+  y: number,
+  z: number,
+  rotationY = 0,
+  palette: FurniturePalette = {}
+): { group: THREE.Group; collisionBox: THREE.Box3; meshes: THREE.Mesh[] } {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.rotation.y = rotationY;
+  const meshes: THREE.Mesh[] = [];
+
+  const sofaMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.85 }); // Warm off-white
+  const woodMat = new THREE.MeshStandardMaterial({ color: palette.woodTone || 0xd4a373, roughness: 0.4 });
+  const rugMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.95 });
+
+  // Plush area rug (3.4m x 2.4m)
+  const rug = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.015, 2.4), rugMat);
+  rug.position.set(0, 0.008, 0);
+  rug.receiveShadow = true;
+  group.add(rug);
+
+  // Minimalist 3-seater sofa (2.3m wide, 0.85m deep)
+  const sofaBase = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.42, 0.85), sofaMat);
+  sofaBase.position.set(0, 0.21, 0.7);
+  sofaBase.castShadow = true;
+  sofaBase.userData = { name: 'Lounge Sofa', isObstacle: true };
+  group.add(sofaBase);
+  meshes.push(sofaBase);
+
+  const sofaBack = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.42, 0.22), sofaMat);
+  sofaBack.position.set(0, 0.55, 1.02);
+  sofaBack.castShadow = true;
+  group.add(sofaBack);
+
+  // Low oak coffee table (1.2m x 0.6m, 0.34m high)
+  const table = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 0.6), woodMat);
+  table.position.set(0, 0.32, -0.05);
+  table.castShadow = true;
+  group.add(table);
+  meshes.push(table);
+
+  // Table legs
+  [-0.5, 0.5].forEach((tx) => {
+    [-0.22, 0.22].forEach((tz) => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.3, 12), woodMat);
+      leg.position.set(tx, 0.15, -0.05 + tz);
+      leg.castShadow = true;
+      group.add(leg);
+    });
+  });
+
+  // 2 modern accent armchairs facing the sofa
+  [-0.8, 0.8].forEach((ax) => {
+    const armchair = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.65, 0.72), sofaMat);
+    armchair.position.set(ax, 0.325, -0.8);
+    armchair.rotation.y = Math.PI;
+    armchair.castShadow = true;
+    group.add(armchair);
+    meshes.push(armchair);
+  });
+
+  // Small potted succulent on coffee table
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.08, 16), sofaMat);
+  pot.position.set(0, 0.38, -0.05);
+  group.add(pot);
+  const plant = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.6 }));
+  plant.position.set(0, 0.44, -0.05);
+  group.add(plant);
+
+  const collisionBox = new THREE.Box3(
+    new THREE.Vector3(x - 1.8, y, z - 1.4),
+    new THREE.Vector3(x + 1.8, y + 1.0, z + 1.3)
+  );
+
+  return { group, collisionBox, meshes };
+}
+

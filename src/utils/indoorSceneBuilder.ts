@@ -8,7 +8,13 @@ import {
   buildLivingRoomSuite,
   buildMasterBedSuite,
   buildKitchenSuite,
-  buildTerraceBalconySuite
+  buildTerraceBalconySuite,
+  buildPottedPlant,
+  buildWhiteboardStand,
+  buildWorkstationBenchCluster,
+  buildReceptionDeskSuite,
+  buildOfficeLoungeBreakout,
+  buildConferenceCabin
 } from './furnitureAssetBuilder';
 
 export interface DigitalTwinBuildResult {
@@ -205,6 +211,63 @@ export function buildIndoorDigitalTwin(
     return wall;
   }
 
+  // Modern Architectural Glass Window Wall (with black aluminum mullions)
+  const windowGlassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xe0f2fe,
+    transparent: true,
+    opacity: 0.35,
+    roughness: 0.1,
+    transmission: 0.75
+  });
+  const windowFrameMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.4,
+    metalness: 0.7
+  });
+
+  function addArchitecturalWindow(
+    x: number,
+    z: number,
+    length: number,
+    isHorizontal = true,
+    height = 1.4
+  ) {
+    const paneDepth = isHorizontal ? 0.06 : length;
+    const paneWidth = isHorizontal ? length : 0.06;
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(paneWidth, height, paneDepth), windowGlassMat);
+    glass.position.set(x, height / 2, z);
+    architectureGroup.add(glass);
+
+    // Frame top and bottom
+    const bottomFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(isHorizontal ? length : 0.1, 0.06, isHorizontal ? 0.1 : length),
+      windowFrameMat
+    );
+    bottomFrame.position.set(x, 0.03, z);
+    architectureGroup.add(bottomFrame);
+
+    const topFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(isHorizontal ? length : 0.1, 0.06, isHorizontal ? 0.1 : length),
+      windowFrameMat
+    );
+    topFrame.position.set(x, height, z);
+    architectureGroup.add(topFrame);
+
+    // Vertical mullions every ~1.2m
+    const mullionCount = Math.max(2, Math.floor(length / 1.2));
+    for (let i = 0; i <= mullionCount; i++) {
+      const offset = -length / 2 + (i / mullionCount) * length;
+      const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, height, 0.08), windowFrameMat);
+      if (isHorizontal) {
+        mullion.position.set(x + offset, height / 2, z);
+      } else {
+        mullion.position.set(x, height / 2, z + offset);
+        mullion.rotation.y = Math.PI / 2;
+      }
+      architectureGroup.add(mullion);
+    }
+  }
+
   function addSolidObstacle(
     name: string,
     x: number,
@@ -280,11 +343,11 @@ export function buildIndoorDigitalTwin(
       floorColor = 0xe7e5e4; // Corridor stone
       roughness = 0.35;
     } else if (zone.type === 'lab') {
-      floorColor = 0xdbeafe;
-      roughness = 0.3;
+      floorColor = 0xd7c4b0; // Warm oak lab finish matching render
+      roughness = 0.35;
     } else if (zone.type === 'office') {
-      floorColor = 0xf1f5f9;
-      roughness = 0.45;
+      floorColor = 0xddcbb6; // Warm minimalist oak wood floor matching render
+      roughness = 0.38;
     }
 
     const floorGeo = new THREE.PlaneGeometry(w - 0.08, d - 0.08);
@@ -484,22 +547,47 @@ export function buildIndoorDigitalTwin(
     // 8. Bathroom Shower Enclosure (Frosted Acrylic & Chrome)
     addSolidObstacle('Shower Glass Wall', 0.8, 0, -6.0, 1.4, 1.35, 1.3, 0x93c5fd, 0.3, 0.2);
 
+    // 9. Windows, Doors & Flower Pots (Matching uploaded render)
+    addArchitecturalWindow(7.4, 4.0, 4.4, false); // East wall kitchen window
+    addArchitecturalWindow(7.4, -4.0, 3.8, false); // East wall study window
+    addArchitecturalWindow(-2.2, 7.0, 2.4, true);  // Living room sliding glass terrace door
+
+    // Ceramic Potted Plants / Flower Pots
+    architectureGroup.add(buildPottedPlant(-1.8, 0, 4.8, 1.05)); // Next to sofa
+    architectureGroup.add(buildPottedPlant(-5.6, 0, 1.2, 0.95)); // Living room corner
+    architectureGroup.add(buildPottedPlant(2.8, 0, -0.6, 0.85)); // Dining nook
+    architectureGroup.add(buildPottedPlant(6.4, 0, 5.2, 0.90)); // Kitchen counter plant
+
+    // Oak Dining Credenza / Sideboard along living/dining partition
+    addSolidObstacle('Oak Dining Sideboard', 2.8, 0, 1.8, 0.45, 0.85, 1.8, 0x4a3728);
+
   } else if (preset === 'office') {
     // =========================================================================
-    // CORPORATE / TECHFEST / JUSPAY HUB (Solid Architecture, 1.4m Cutaway)
+    // CORPORATE OFFICE DIGITAL TWIN (Matching High-End Architectural Render)
+    // Desks with laptops and ergonomic chairs, reception suite, breakout lounge,
+    // conference boardroom, whiteboards, partition screens, windows & flower pots
     // =========================================================================
-    addWall(0, 11, 32.4, 0.35);
-    addWall(0, -11, 32.4, 0.35);
-    addWall(-16.2, 0, 0.35, 22.4);
-    addWall(16.2, 0, 0.35, 22.4);
 
-    // West Wing partition with open doorways
-    addWall(-4, 5.0, 0.25, 2.8);
+    // Perimeter Cutaway Walls with Architectural Glass Window Walls
+    addWall(0, -11, 32.4, 0.35); // North outer wall
+    addWall(-16.2, 0, 0.35, 22.4); // West outer wall
+
+    // South wall with center glass window array
+    addWall(-10.5, 11, 11.4, 0.35);
+    addArchitecturalWindow(0, 11, 9.6, true);
+    addWall(10.5, 11, 11.4, 0.35);
+
+    // East wall with full-length architectural window wall
+    addWall(16.2, -7.5, 0.35, 7.0);
+    addArchitecturalWindow(16.2, 1.0, 10.0, false);
+    addWall(16.2, 9.5, 0.35, 3.0);
+
+    // Wing partitions with open circulation doorways
+    addWall(-4, 5.2, 0.25, 2.6);
     addWall(-4, -5.0, 0.25, 2.8);
     addWall(-4, -9.2, 0.25, 3.2);
 
-    // East Wing partition with open doorways
-    addWall(4, 5.0, 0.25, 2.8);
+    addWall(4, 5.2, 0.25, 2.6);
     addWall(4, -5.0, 0.25, 2.8);
     addWall(4, -9.2, 0.25, 3.2);
 
@@ -507,22 +595,70 @@ export function buildIndoorDigitalTwin(
     addWall(-10, 0, 12, 0.25);
     addWall(10, 0, 12, 0.25);
 
-    // Corporate Obstacles & Workstations
-    addSolidObstacle('Main Welcome & Reception Desk', 0, 0, 7.5, 3.4, 1.1, 0.9, 0x1e293b, 0.4, 0.1);
-    addSolidObstacle('Silicon Espresso Bar & Breakout Counter', 0, 0, -4.5, 3.6, 0.95, 1.1, 0x334155, 0.4, 0.1);
-    addSolidObstacle('Server Cluster Rack Bay', -8, 0, -6, 3.8, 1.35, 1.8, 0x1e293b, 0.4, 0.6);
-    addSolidObstacle('Turing Boardroom Conference Table', 8, 0, -6, 2.8, 0.78, 4.8, 0x3e2723, 0.3, 0.1);
+    // 1. Reception & Welcome Foyer
+    const reception = buildReceptionDeskSuite(0, 0, 7.8, 0, { woodTone: 0xd4a373 });
+    architectureGroup.add(reception.group);
+    obstacleBoxes.push(reception.collisionBox);
+    obstacleMeshes.push(...reception.meshes);
 
-    // Engineering Pods (Workstations)
-    const pod1 = buildComputerWorkstation(-8, 0, 3, 0, { woodTone: 0x1e293b, upholstery: 0x2563eb });
-    architectureGroup.add(pod1.group);
-    obstacleBoxes.push(pod1.collisionBox);
-    obstacleMeshes.push(...pod1.meshes);
+    // Flanking ceramic potted ficus plants at reception entrance
+    architectureGroup.add(buildPottedPlant(-2.4, 0, 8.0, 1.15));
+    architectureGroup.add(buildPottedPlant(2.4, 0, 8.0, 1.15));
 
-    const pod2 = buildComputerWorkstation(8, 0, 3, Math.PI, { woodTone: 0x1e293b, upholstery: 0x10b981 });
-    architectureGroup.add(pod2.group);
-    obstacleBoxes.push(pod2.collisionBox);
-    obstacleMeshes.push(...pod2.meshes);
+    // 2. Breakout Waiting Lounge Suite
+    const lounge = buildOfficeLoungeBreakout(0, 0, 3.0, 0, { woodTone: 0xd4a373 });
+    architectureGroup.add(lounge.group);
+    obstacleBoxes.push(lounge.collisionBox);
+    obstacleMeshes.push(...lounge.meshes);
+
+    architectureGroup.add(buildPottedPlant(-2.2, 0, 1.6, 0.9));
+    architectureGroup.add(buildPottedPlant(2.2, 0, 1.6, 0.9));
+
+    // 3. West Wing: Collaborative Workstation Bench Clusters (Total 8 Desks + Laptops + Chairs)
+    const cluster1 = buildWorkstationBenchCluster(-9, 0, 3.2, 0, { woodTone: 0xd4a373 });
+    architectureGroup.add(cluster1.group);
+    obstacleBoxes.push(cluster1.collisionBox);
+    obstacleMeshes.push(...cluster1.meshes);
+
+    const cluster2 = buildWorkstationBenchCluster(-9, 0, -2.5, 0, { woodTone: 0xd4a373 });
+    architectureGroup.add(cluster2.group);
+    obstacleBoxes.push(cluster2.collisionBox);
+    obstacleMeshes.push(...cluster2.meshes);
+
+    // Mobile whiteboard on wheels in West Wing
+    architectureGroup.add(buildWhiteboardStand(-5.2, 0, 0.5, Math.PI / 2));
+
+    // Server Cluster Rack Bay & Technical storage
+    addSolidObstacle('Server Cluster Rack Bay', -11, 0, -7.5, 4.2, 1.35, 1.8, 0x1e293b, 0.4, 0.6);
+    addSolidObstacle('Office Storage Cabinet Bay', -14.8, 0, 0, 0.6, 1.3, 4.0, 0xd4a373);
+
+    // Corner foliage
+    architectureGroup.add(buildPottedPlant(-14.5, 0, 9.2, 1.1));
+    architectureGroup.add(buildPottedPlant(-14.5, 0, -9.2, 1.1));
+
+    // 4. East Wing: Turing Executive Boardroom Conference Cabin
+    const conf = buildConferenceCabin(9, 0, -5.2, 6.4, 5.2, 0, { woodTone: 0xd4a373 });
+    architectureGroup.add(conf.group);
+    obstacleBoxes.push(conf.collisionBox);
+    obstacleMeshes.push(...conf.meshes);
+
+    // Mobile whiteboard in East Wing
+    architectureGroup.add(buildWhiteboardStand(5.5, 0, -3.2, 0));
+
+    // East Wing Collaborative Workstation Bench Cluster (4 Desks + Laptops + Chairs)
+    const cluster3 = buildWorkstationBenchCluster(9, 0, 3.2, 0, { woodTone: 0xd4a373 });
+    architectureGroup.add(cluster3.group);
+    obstacleBoxes.push(cluster3.collisionBox);
+    obstacleMeshes.push(...cluster3.meshes);
+
+    // Corner foliage
+    architectureGroup.add(buildPottedPlant(14.5, 0, 9.2, 1.1));
+    architectureGroup.add(buildPottedPlant(14.5, 0, -9.2, 1.1));
+
+    // 5. Silicon Refreshment Pantry & Espresso Bar
+    addSolidObstacle('Silicon Espresso Bar & Pantry', 0, 0, -4.5, 3.8, 0.95, 1.1, 0x4a3728, 0.4, 0.1);
+    architectureGroup.add(buildPottedPlant(2.4, 0, -4.5, 0.95));
+    architectureGroup.add(buildPottedPlant(-2.4, 0, -4.5, 0.95));
 
   } else if (preset === 'custom_room' && customRoom) {
     // =========================================================================

@@ -84,7 +84,7 @@ export default function POIDetailsCard({
         ) : (
           <button className="btn-directions-primary" onClick={() => onStartNavigation(poi)}>
             <Navigation size={16} />
-            <span>Directions</span>
+            <span>{poi.category === 'sop' ? 'Route to SOP' : 'Directions'}</span>
           </button>
         )}
       </div>

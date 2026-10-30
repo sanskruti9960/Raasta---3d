@@ -1,4 +1,4 @@
-export type POICategory = 'room' | 'lab' | 'amenity' | 'safety' | 'tech';
+export type POICategory = 'room' | 'lab' | 'amenity' | 'safety' | 'tech' | 'sop';
 
 export interface POI {
   id: string;
@@ -45,7 +45,7 @@ export interface CustomRoomData {
   extractedKeyframesCount: number;
   pointCount: number;
   reconstructionTimeSec: number;
-  roomType: 'bedroom' | 'living' | 'study' | 'studio' | 'office' | 'general';
+  roomType: 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'study' | 'studio' | 'office' | 'general';
   dimensions: {
     width: number;
     depth: number;

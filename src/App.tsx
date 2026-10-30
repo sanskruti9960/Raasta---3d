@@ -10,9 +10,15 @@ import type {
   LightingTime,
   UtilityLayer
 } from './types/spatial';
-import { HOME_POIS, HOME_NAV_GRAPH } from './data/homeDataset';
-import { OFFICE_POIS, OFFICE_NAV_GRAPH } from './data/officeDataset';
-import { findShortestPath, distance3D } from './utils/navGraph';
+import { HOME_POIS, HOME_NAV_GRAPH, HOME_ROOM_ZONES } from './data/homeDataset';
+import { OFFICE_POIS, OFFICE_NAV_GRAPH, OFFICE_ROOM_ZONES } from './data/officeDataset';
+import {
+  findShortestPath,
+  distance3D,
+  HOME_DEFAULT_OBSTACLES,
+  OFFICE_DEFAULT_OBSTACLES,
+  type ObstacleAABB
+} from './utils/navGraph';
 import SplatViewer from './components/SplatViewer';
 import TopNavbar from './components/TopNavbar';
 import Minimap from './components/Minimap';
@@ -26,6 +32,7 @@ import DocumentationModal from './components/DocumentationModal';
 import AddPOIDialog from './components/AddPOIDialog';
 import RoamControlsOverlay from './components/RoamControlsOverlay';
 import FloorplanModal from './components/FloorplanModal';
+import { Video } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -38,6 +45,7 @@ export default function App() {
   // Custom Video-Reconstructed Room State
   const [customRoom, setCustomRoom] = useState<CustomRoomData | null>(null);
   const [customPoisList, setCustomPoisList] = useState<POI[]>([]);
+  const [currentRoomZone, setCurrentRoomZone] = useState<RoomZone | null>(null);
 
   // 2. POIs & Room State (switches between Home, Office and Custom Video Room)
   const [homePoisList, setHomePoisList] = useState<POI[]>(HOME_POIS);
@@ -60,10 +68,66 @@ export default function App() {
         : OFFICE_NAV_GRAPH;
   }, [preset, customRoom]);
 
+  // Active Obstacle Bounding Boxes for Line-of-Sight Shortcut & Anti-Zigzag Routing
+  const activeObstacles = useMemo<ObstacleAABB[]>(() => {
+    if (preset === 'custom_room' && customRoom) {
+      const list: ObstacleAABB[] = [];
+      const halfW = customRoom.dimensions.width / 2;
+      const halfD = customRoom.dimensions.depth / 2;
+      // Perimeter bounds
+      list.push({ minX: -halfW, maxX: halfW, minZ: -halfD - 0.2, maxZ: -halfD + 0.2 });
+      list.push({ minX: -halfW - 0.2, maxX: -halfW + 0.2, minZ: -halfD, maxZ: halfD });
+      list.push({ minX: halfW - 0.2, maxX: halfW + 0.2, minZ: -halfD, maxZ: halfD });
+      // Partition walls
+      if (customRoom.zones && customRoom.zones.length > 1) {
+        list.push({ minX: 0.3, maxX: 0.7, minZ: -4.0, maxZ: 1.5 });
+        list.push({ minX: -4.5, maxX: -1.0, minZ: -0.6, maxZ: -0.4 });
+        list.push({ minX: 1.0, maxX: 4.5, minZ: 0.4, maxZ: 0.6 });
+      }
+      return list;
+    }
+    return preset === 'home' ? HOME_DEFAULT_OBSTACLES : OFFICE_DEFAULT_OBSTACLES;
+  }, [preset, customRoom]);
+
+  // Active Room Zones for current dataset or reconstructed video space
+  const activeZones = useMemo<RoomZone[]>(() => {
+    return preset === 'custom_room'
+      ? (customRoom?.zones || [])
+      : preset === 'home'
+        ? HOME_ROOM_ZONES
+        : OFFICE_ROOM_ZONES;
+  }, [preset, customRoom]);
+
+  // Dynamic Room Counts (Bedrooms, Bathrooms, Terraces, Workspaces, Total)
+  const specsCounts = useMemo(() => {
+    const bedrooms = activeZones.filter((z) => z.type === 'bedroom').length;
+    const bathrooms = activeZones.filter((z) => z.type === 'bathroom').length;
+    const terraces = activeZones.filter((z) => z.type === 'balcony').length;
+    const study = activeZones.filter((z) => z.type === 'study' || z.type === 'office').length;
+    const living = activeZones.filter((z) => z.type === 'living').length;
+    const kitchens = activeZones.filter((z) => z.type === 'kitchen').length;
+    const total = activeZones.length;
+    return {
+      bedrooms: bedrooms || (preset === 'home' ? 2 : 1),
+      bathrooms: bathrooms || (preset === 'home' ? 2 : 1),
+      terraces: terraces || 1,
+      study: study || 1,
+      living: living || 1,
+      kitchens: kitchens || 1,
+      total
+    };
+  }, [activeZones, preset]);
+
   // 3. Navigation State
   const [activePath, setActivePath] = useState<NavPathResult | null>(null);
   const [targetNavPOI, setTargetNavPOI] = useState<POI | null>(null);
   const [currentNavStep, setCurrentNavStep] = useState<number>(0);
+  const [isAutoRoaming, setIsAutoRoaming] = useState<boolean>(false);
+  const [tappedObjectInfo, setTappedObjectInfo] = useState<{
+    name: string;
+    position: [number, number, number];
+    zoneName?: string;
+  } | null>(null);
 
   // 4. Telemetry State
   const [telemetry, setTelemetry] = useState<{
@@ -76,17 +140,19 @@ export default function App() {
     fps: 60
   });
 
-  // 5. Lighting & Utilities State (Fuselab Reference Image)
-  const [lightingTime, setLightingTime] = useState<LightingTime>('afternoon');
-  const [utilityLayer, setUtilityLayer] = useState<UtilityLayer>('none');
+  // 5. Default Lighting & Utilities Configuration
+  const lightingTime: LightingTime = 'afternoon';
+  const utilityLayer: UtilityLayer = 'none';
 
-  // 6. Modals State
+  // 6. Modals & Drag-and-Drop State
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [isFloorplanOpen, setIsFloorplanOpen] = useState(false);
   const [isAddingPOI, setIsAddingPOI] = useState(false);
   const [newPOICoords, setNewPOICoords] = useState<[number, number, number] | null>(null);
+  const [initialDroppedVideo, setInitialDroppedVideo] = useState<File | null>(null);
+  const [isWindowDragging, setIsWindowDragging] = useState(false);
 
   // Handle Preset Change
   const handleSetPreset = useCallback((newPreset: EnvironmentPreset) => {
@@ -142,17 +208,18 @@ export default function App() {
     [activePath, currentNavStep]
   );
 
-  // Navigation handlers
+  // Navigation handlers (Obstacle-aware line-of-sight shortcutting without zigzags)
   const handleStartNavigation = useCallback(
     (poi: POI) => {
-      const pathResult = findShortestPath(telemetry.position, poi.position, activeNavGraph);
+      const pathResult = findShortestPath(telemetry.position, poi.position, activeNavGraph, activeObstacles);
       if (pathResult) {
         setActivePath(pathResult);
         setTargetNavPOI(poi);
         setCurrentNavStep(0);
+        setIsAutoRoaming(false);
       }
     },
-    [telemetry.position, activeNavGraph]
+    [telemetry.position, activeNavGraph, activeObstacles]
   );
 
   const handleNavigateToRoom = useCallback(
@@ -168,20 +235,22 @@ export default function App() {
         tags: [zone.type, 'room', 'destination']
       };
 
-      const pathResult = findShortestPath(telemetry.position, zone.center, activeNavGraph);
+      const pathResult = findShortestPath(telemetry.position, zone.center, activeNavGraph, activeObstacles);
       if (pathResult) {
         setActivePath(pathResult);
         setTargetNavPOI(roomTargetPOI);
         setCurrentNavStep(0);
+        setIsAutoRoaming(false);
       }
     },
-    [telemetry.position, activeNavGraph]
+    [telemetry.position, activeNavGraph, activeObstacles]
   );
 
   const handleCancelNavigation = useCallback(() => {
     setActivePath(null);
     setTargetNavPOI(null);
     setCurrentNavStep(0);
+    setIsAutoRoaming(false);
   }, []);
 
   // POI selection
@@ -213,6 +282,14 @@ export default function App() {
     [isAddingPOI]
   );
 
+  // Object tap to name SOP or route
+  const handleTapObject = useCallback(
+    (obj: { name: string; position: [number, number, number]; zoneName?: string }) => {
+      setTappedObjectInfo(obj);
+    },
+    []
+  );
+
   const handleSaveCustomPOI = useCallback(
     (newPoi: POI) => {
       if (preset === 'custom_room') {
@@ -223,8 +300,11 @@ export default function App() {
         setOfficePoisList((prev) => [...prev, newPoi]);
       }
       setSelectedPOI(newPoi);
+      setTappedObjectInfo(null);
+      // Automatically show the accurate route straight to the new SOP!
+      handleStartNavigation(newPoi);
     },
-    [preset]
+    [preset, handleStartNavigation]
   );
 
   // Nearest POI for AR telemetry
@@ -243,24 +323,50 @@ export default function App() {
   }, [pois, telemetry.position]);
 
   return (
-    <div className="raasta-app-container">
-      {/* 1. Top Architectural Control Bar (fuselab creative styling) */}
+    <div
+      className={`raasta-app-container ${isWindowDragging ? 'window-drag-active' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isWindowDragging) setIsWindowDragging(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.currentTarget === e.target) setIsWindowDragging(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsWindowDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && (file.type.startsWith('video/') || /\.(mp4|mov|webm|mkv)$/i.test(file.name))) {
+          setInitialDroppedVideo(file);
+          setIsUploadOpen(true);
+        }
+      }}
+    >
+      {/* Fullscreen Video Drag Overlay */}
+      {isWindowDragging && (
+        <div className="window-drop-overlay">
+          <div className="window-drop-card">
+            <Video size={44} className="text-sky-400 mx-auto mb-2" />
+            <h3 className="text-lg font-bold text-white">Drop Room Video to Reconstruct 3D Digital Twin</h3>
+            <p className="text-xs text-slate-300 mt-1">Automatic temporal extraction, multi-room boundary recognition, and 3D Gaussian Splats synthesis.</p>
+          </div>
+        </div>
+      )}
+      {/* 1. Minimal Top Navigation Bar */}
       <TopNavbar
         mode={mode}
         onSetMode={setMode}
         preset={preset}
         onSetPreset={handleSetPreset}
         hasCustomRoom={Boolean(customRoom)}
-        lightingTime={lightingTime}
-        onSetLightingTime={setLightingTime}
-        utilityLayer={utilityLayer}
-        onSetUtilityLayer={setUtilityLayer}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenUpload={() => setIsUploadOpen(true)}
         onOpenDocs={() => setIsDocsOpen(true)}
         onToggleFloorplan={() => setIsFloorplanOpen(true)}
-        isAddingPOI={isAddingPOI}
-        onToggleAddPOI={() => setIsAddingPOI(!isAddingPOI)}
         fps={telemetry.fps}
       />
 
@@ -281,7 +387,80 @@ export default function App() {
         onTelemetryUpdate={handleTelemetryUpdate}
         isAddingPOI={isAddingPOI}
         onFloorClick={handleFloorClick}
+        onRoomChange={setCurrentRoomZone}
+        onTapObject={handleTapObject}
+        isAutoRoaming={isAutoRoaming}
+        onAutoRoamComplete={() => setIsAutoRoaming(false)}
+        onStepChange={(stepIdx) => setCurrentNavStep(stepIdx)}
       />
+
+      {/* Tapped Object Quick Action Card (SOP Naming & Accurate Route) */}
+      {tappedObjectInfo && !newPOICoords && (
+        <div className="tapped-object-quick-pill">
+          <div className="tapped-object-col">
+            <span className="tapped-tag">Tapped Room Object</span>
+            <span className="tapped-name">📍 {tappedObjectInfo.name}</span>
+          </div>
+          <div className="tapped-actions">
+            <button
+              className="tapped-btn sop-btn"
+              onClick={() => setNewPOICoords(tappedObjectInfo.position)}
+              title="Name this object and create an SOP waypoint"
+            >
+              📋 Name SOP
+            </button>
+            <button
+              className="tapped-btn route-btn"
+              onClick={() => {
+                const tempSopPOI: POI = {
+                  id: `poi-sop-${Date.now()}`,
+                  name: `${tappedObjectInfo.name} SOP`,
+                  category: 'sop',
+                  position: tappedObjectInfo.position,
+                  description: `SOP Landmark for ${tappedObjectInfo.name}`,
+                  floor: 1,
+                  tags: ['sop', 'destination']
+                };
+                handleStartNavigation(tempSopPOI);
+                setTappedObjectInfo(null);
+              }}
+              title="Show direct, accurate route to this object"
+            >
+              🧭 Route Here
+            </button>
+            <button
+              className="tapped-close-btn"
+              onClick={() => setTappedObjectInfo(null)}
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Real-Time Live Room Recognition Location HUD */}
+      {currentRoomZone && (
+        <div className="live-room-recognition-hud">
+          <div className="room-indicator-left">
+            <span className="room-indicator-pulse" />
+            <div className="room-text-col">
+              <span className="room-loc-sub">CURRENT LOCATION</span>
+              <span className="room-loc-name">{currentRoomZone.name}</span>
+            </div>
+          </div>
+          <div className="room-indicator-right">
+            <span className="room-area-tag">{currentRoomZone.areaSqFt} sq.ft</span>
+            <button
+              className="room-quick-inspect-btn"
+              onClick={() => setSelectedZone(currentRoomZone)}
+              title="Inspect room details and furniture"
+            >
+              Inspect Room
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 3. AR Overlay Mode */}
       {mode === 'ar' && (
@@ -300,51 +479,32 @@ export default function App() {
           targetPOI={targetNavPOI}
           onCancel={handleCancelNavigation}
           currentStepIndex={currentNavStep}
+          isAutoRoaming={isAutoRoaming}
+          onToggleAutoRoam={() => setIsAutoRoaming((prev) => !prev)}
         />
       )}
 
-      {/* 5. Reference Image: Bottom-Left Unit Specs Stack (🛏️ 2, 🛁 2, 🌿 1) */}
+      {/* 5. Dynamic Recognized Unit Specs Stack (Bedrooms, Bathrooms, Terraces, Total) */}
       <div className="fuselab-unit-specs-stack">
         <div className="spec-badge-item" title="Bedrooms">
           <span className="spec-icon">🛏️</span>
-          <span className="spec-count">{preset === 'home' ? '2' : customRoom ? '1' : '4'}</span>
+          <span className="spec-count">{specsCounts.bedrooms}</span>
         </div>
         <div className="spec-badge-item" title="Bathrooms">
           <span className="spec-icon">🛁</span>
-          <span className="spec-count">{preset === 'home' ? '2' : '1'}</span>
+          <span className="spec-count">{specsCounts.bathrooms}</span>
         </div>
-        <div className="spec-badge-item" title="Terraces">
+        <div className="spec-badge-item" title="Terraces & Balconies">
           <span className="spec-icon">🌿</span>
-          <span className="spec-count">1</span>
+          <span className="spec-count">{specsCounts.terraces}</span>
+        </div>
+        <div className="spec-badge-item" title="Total Recognized Rooms">
+          <span className="spec-icon">🏛️</span>
+          <span className="spec-count">{specsCounts.total}</span>
         </div>
       </div>
 
-      {/* 6. Reference Image: Bottom-Right View Controls (Gallery 10, Room view, Map) */}
-      <div className="fuselab-bottom-right-cluster">
-        <button
-          className="fuselab-quick-view-btn"
-          onClick={() => setIsUploadOpen(true)}
-          title="View Reconstructed Video Keyframes"
-        >
-          <span>🖼️ Gallery {customRoom ? customRoom.keyframes.length : '10'}</span>
-        </button>
-        <button
-          className={`fuselab-quick-view-btn ${mode === 'walk' ? 'active' : ''}`}
-          onClick={() => setMode('walk')}
-          title="Walk Inside Room (First-Person)"
-        >
-          <span>🚶 Room view</span>
-        </button>
-        <button
-          className={`fuselab-quick-view-btn ${mode === 'orbit' ? 'active' : ''}`}
-          onClick={() => setMode('orbit')}
-          title="3D Architectural Overview Map"
-        >
-          <span>🗺️ Map</span>
-        </button>
-      </div>
-
-      {/* 7. 2D Interactive Radar Minimap */}
+      {/* 6. 2D Interactive Radar Minimap */}
       <Minimap
         preset={preset}
         customRoom={customRoom}
@@ -398,10 +558,14 @@ export default function App() {
 
       <UploadModal
         isOpen={isUploadOpen}
-        onClose={() => setIsUploadOpen(false)}
+        onClose={() => {
+          setIsUploadOpen(false);
+          setInitialDroppedVideo(null);
+        }}
         onLoadModel={handleLoadModel}
         currentModelName={modelName}
         onCustomRoomLoaded={handleCustomRoomLoaded}
+        initialVideoFile={initialDroppedVideo}
       />
 
       <DocumentationModal
@@ -411,8 +575,13 @@ export default function App() {
 
       <AddPOIDialog
         isOpen={Boolean(newPOICoords)}
-        onClose={() => setNewPOICoords(null)}
+        onClose={() => {
+          setNewPOICoords(null);
+          setTappedObjectInfo(null);
+        }}
         coordinates={newPOICoords}
+        initialName={tappedObjectInfo ? `${tappedObjectInfo.name} SOP` : ''}
+        initialCategory="sop"
         onSavePOI={handleSaveCustomPOI}
       />
 

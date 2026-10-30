@@ -114,7 +114,7 @@ export default function Minimap({
                   className="zone-rect"
                 />
                 <text x={cx} y={cy} className="zone-text-label">
-                  {zone.name.split(' ')[0]}
+                  {zone.type.toUpperCase()}
                 </text>
               </g>
             );

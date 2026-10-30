@@ -143,51 +143,116 @@ export default function FloorplanModal({
                 </g>
               )}
 
-              {/* Custom Room from Video Layout */}
+              {/* Custom Multi-Room Video Reconstructed Layout */}
               {isCustom && (
                 <g>
+                  {/* Outer CAD boundary */}
                   <rect
-                    x="150"
-                    y="100"
-                    width="500"
-                    height="400"
-                    fill="rgba(30, 41, 59, 0.4)"
+                    x="70"
+                    y="50"
+                    width="660"
+                    height="500"
+                    fill="none"
                     stroke="#38bdf8"
-                    strokeWidth="3"
+                    strokeWidth="2.5"
+                    rx="4"
                   />
-                  <text x="400" y="150" fill="#ffffff" fontSize="20" fontWeight="bold" textAnchor="middle">
-                    {customRoom.name.toUpperCase()}
-                  </text>
-                  <text x="400" y="180" fill="#38bdf8" fontSize="14" textAnchor="middle" fontFamily="JetBrains Mono, monospace">
-                    Type: {customRoom.roomType.toUpperCase()} • Width: {customRoom.dimensions.width}m • Depth: {customRoom.dimensions.depth}m
+
+                  {/* Header Title */}
+                  <text x="400" y="35" fill="#ffffff" fontSize="15" fontWeight="bold" textAnchor="middle">
+                    {customRoom.name.toUpperCase()} (MULTI-ROOM ARCHITECTURAL BLUEPRINT)
                   </text>
 
+                  {/* All Detected Room Zones */}
+                  {customRoom.zones.map((zone) => {
+                    const halfW = customRoom.dimensions.width / 2;
+                    const halfD = customRoom.dimensions.depth / 2;
+                    const normMinX = (zone.bounds.minX + halfW) / (customRoom.dimensions.width || 1);
+                    const normMaxX = (zone.bounds.maxX + halfW) / (customRoom.dimensions.width || 1);
+                    const normMinZ = (zone.bounds.minZ + halfD) / (customRoom.dimensions.depth || 1);
+                    const normMaxZ = (zone.bounds.maxZ + halfD) / (customRoom.dimensions.depth || 1);
+
+                    const x = 70 + normMinX * 660;
+                    const y = 50 + normMinZ * 500;
+                    const w = Math.max(20, (normMaxX - normMinX) * 660);
+                    const h = Math.max(20, (normMaxZ - normMinZ) * 500);
+                    const cx = x + w / 2;
+                    const cy = y + h / 2;
+
+                    return (
+                      <g key={zone.id}>
+                        <rect
+                          x={x}
+                          y={y}
+                          width={w}
+                          height={h}
+                          fill="rgba(30, 41, 59, 0.45)"
+                          stroke="#38bdf8"
+                          strokeWidth="1.8"
+                          rx="3"
+                        />
+                        <text
+                          x={cx}
+                          y={cy - 6}
+                          fill="#ffffff"
+                          fontSize="13"
+                          fontWeight="bold"
+                          textAnchor="middle"
+                          fontFamily="Inter, sans-serif"
+                        >
+                          {zone.name.toUpperCase()}
+                        </text>
+                        <text
+                          x={cx}
+                          y={cy + 12}
+                          fill="#38bdf8"
+                          fontSize="11"
+                          textAnchor="middle"
+                          fontFamily="JetBrains Mono, monospace"
+                        >
+                          {zone.areaSqFt} sq.ft • Level {zone.floor}
+                        </text>
+                      </g>
+                    );
+                  })}
+
                   {/* Obstacles / Furniture detected */}
-                  {customRoom.detectedObstacles.map((obs, idx) => (
-                    <g key={idx}>
-                      <rect
-                        x={380 + obs.position[0] * 30}
-                        y={300 + obs.position[2] * 30}
-                        width={Math.max(obs.size[0] * 30, 36)}
-                        height={Math.max(obs.size[2] * 30, 28)}
-                        rx="3"
-                        fill={`#${obs.colorHex.toString(16).padStart(6, '0')}`}
-                        fillOpacity="0.7"
-                        stroke="#ffffff"
-                        strokeWidth="1"
-                      />
-                      <text
-                        x={380 + obs.position[0] * 30 + Math.max(obs.size[0] * 30, 36) / 2}
-                        y={300 + obs.position[2] * 30 - 6}
-                        fill="#cbd5e1"
-                        fontSize="10"
-                        fontWeight="600"
-                        textAnchor="middle"
-                      >
-                        {obs.name}
-                      </text>
-                    </g>
-                  ))}
+                  {customRoom.detectedObstacles.map((obs, idx) => {
+                    const halfW = customRoom.dimensions.width / 2;
+                    const halfD = customRoom.dimensions.depth / 2;
+                    const normX = (obs.position[0] + halfW) / (customRoom.dimensions.width || 1);
+                    const normZ = (obs.position[2] + halfD) / (customRoom.dimensions.depth || 1);
+                    const ox = 70 + normX * 660;
+                    const oz = 50 + normZ * 500;
+                    const ow = Math.max(obs.size[0] * 24, 28);
+                    const oh = Math.max(obs.size[2] * 24, 22);
+
+                    return (
+                      <g key={idx}>
+                        <rect
+                          x={ox - ow / 2}
+                          y={oz - oh / 2}
+                          width={ow}
+                          height={oh}
+                          rx="3"
+                          fill="#334155"
+                          fillOpacity="0.75"
+                          stroke="#94a3b8"
+                          strokeWidth="1"
+                        />
+                        <text
+                          x={ox}
+                          y={oz + 3}
+                          fill="#f8fafc"
+                          fontSize="9"
+                          fontWeight="600"
+                          textAnchor="middle"
+                        >
+                          {obs.name.split(' ')[0]}
+                        </text>
+                      </g>
+                    );
+                  })}
                 </g>
               )}
             </svg>

@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d';
 import type { POI, RoomZone, ViewMode, NavPathResult, EnvironmentPreset, CustomRoomData, LightingTime, UtilityLayer } from '../types/spatial';
+import { HOME_ROOM_ZONES } from '../data/homeDataset';
+import { OFFICE_ROOM_ZONES } from '../data/officeDataset';
 import {
   buildIndoorDigitalTwin,
   createPOIMarkerMesh,
@@ -29,6 +31,70 @@ export interface SplatViewerProps {
   }) => void;
   isAddingPOI?: boolean;
   onFloorClick?: (point: [number, number, number]) => void;
+  onRoomChange?: (zone: RoomZone | null) => void;
+  onTapObject?: (objectInfo: { name: string; position: [number, number, number]; zoneName?: string }) => void;
+  isAutoRoaming?: boolean;
+  onAutoRoamComplete?: () => void;
+  onStepChange?: (stepIndex: number) => void;
+}
+
+/**
+ * Continuous Circle-to-AABB character physics solver:
+ * Prevents tunneling or bypassing through ANY wall, partition, desk, table, or sofa.
+ * Smoothly slides along obstacle faces.
+ */
+function resolvePlayerCollision(
+  candX: number,
+  candZ: number,
+  radius: number,
+  boxes: THREE.Box3[]
+): { x: number; z: number } {
+  let curX = candX;
+  let curZ = candZ;
+
+  for (let pass = 0; pass < 3; pass++) {
+    let hadCollision = false;
+
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      // Test obstacle height in player body zone (0.05m to 2.0m)
+      if (b.max.y < 0.05 || b.min.y > 2.0) continue;
+
+      const cx = Math.max(b.min.x, Math.min(b.max.x, curX));
+      const cz = Math.max(b.min.z, Math.min(b.max.z, curZ));
+
+      const dx = curX - cx;
+      const dz = curZ - cz;
+      const distSq = dx * dx + dz * dz;
+
+      if (distSq < radius * radius) {
+        hadCollision = true;
+        const dist = Math.sqrt(distSq);
+
+        if (dist > 1e-4) {
+          const overlap = radius - dist;
+          curX += (dx / dist) * overlap;
+          curZ += (dz / dist) * overlap;
+        } else {
+          // Center is inside box - push to closest edge
+          const dLeft = Math.abs(curX - b.min.x);
+          const dRight = Math.abs(b.max.x - curX);
+          const dTop = Math.abs(curZ - b.min.z);
+          const dBottom = Math.abs(b.max.z - curZ);
+          const minD = Math.min(dLeft, dRight, dTop, dBottom);
+
+          if (minD === dLeft) curX = b.min.x - radius;
+          else if (minD === dRight) curX = b.max.x + radius;
+          else if (minD === dTop) curZ = b.min.z - radius;
+          else curZ = b.max.z + radius;
+        }
+      }
+    }
+
+    if (!hadCollision) break;
+  }
+
+  return { x: curX, z: curZ };
 }
 
 /**
@@ -108,7 +174,12 @@ export default function SplatViewer({
   utilityLayer = 'none',
   onTelemetryUpdate,
   isAddingPOI = false,
-  onFloorClick
+  onFloorClick,
+  onRoomChange,
+  onTapObject,
+  isAutoRoaming = false,
+  onAutoRoamComplete,
+  onStepChange
 }: SplatViewerProps) {
   // Dedicated host for WebGL canvas - never directly host React children to prevent DOM de-sync
   const canvasHostRef = useRef<HTMLDivElement>(null);
@@ -136,22 +207,42 @@ export default function SplatViewer({
   const obstacleMeshesRef = useRef<THREE.Mesh[]>([]);
   const hasLoadedSplatRef = useRef<boolean>(false);
 
+  // Active dataset and room tracking refs
+  const presetRef = useRef(preset);
+  const customRoomRef = useRef(customRoom);
+  const onRoomChangeRef = useRef(onRoomChange);
+  const lastDetectedZoneIdRef = useRef<string | null>(null);
+
   // Player position in 3D space
   const playerPos = useRef<THREE.Vector3>(
     new THREE.Vector3(preset === 'home' ? 0.5 : 0, 0, preset === 'home' ? 0.5 : 7)
   );
+
+  // Navigation auto-roam tracking
+  const autoRoamIndex = useRef<number>(0);
+  const isAutoRoamingRef = useRef<boolean>(isAutoRoaming);
+  const onAutoRoamCompleteRef = useRef(onAutoRoamComplete);
+  const onStepChangeRef = useRef(onStepChange);
 
   // Callbacks refs to prevent re-instantiating WebGL
   const onTelemetryUpdateRef = useRef(onTelemetryUpdate);
   const onSelectPOIRef = useRef(onSelectPOI);
   const onSelectZoneRef = useRef(onSelectZone);
   const onFloorClickRef = useRef(onFloorClick);
+  const onTapObjectRef = useRef(onTapObject);
 
   useEffect(() => {
+    presetRef.current = preset;
+    customRoomRef.current = customRoom;
+    onRoomChangeRef.current = onRoomChange;
     onTelemetryUpdateRef.current = onTelemetryUpdate;
     onSelectPOIRef.current = onSelectPOI;
     onSelectZoneRef.current = onSelectZone;
     onFloorClickRef.current = onFloorClick;
+    onTapObjectRef.current = onTapObject;
+    isAutoRoamingRef.current = isAutoRoaming;
+    onAutoRoamCompleteRef.current = onAutoRoamComplete;
+    onStepChangeRef.current = onStepChange;
   });
 
   // Walk & 3rd Person state
@@ -240,7 +331,25 @@ export default function SplatViewer({
     dtArchitectureRef.current = dt.architectureGroup;
     zoneGroupRef.current = dt.zoneGroup;
     animatedElementsRef.current = dt.animatedElements;
-    collisionBoxesRef.current = [...dt.wallBoxes, ...dt.obstacleBoxes];
+    // Collect all solid wall and furniture collision boxes
+    const allBoxes: THREE.Box3[] = [...dt.wallBoxes, ...dt.obstacleBoxes];
+    dt.wallMeshes.forEach((mesh) => {
+      mesh.geometry.computeBoundingBox();
+      if (mesh.geometry.boundingBox) {
+        mesh.updateMatrixWorld(true);
+        const b = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+        allBoxes.push(b);
+      }
+    });
+    dt.obstacleMeshes.forEach((mesh) => {
+      mesh.geometry.computeBoundingBox();
+      if (mesh.geometry.boundingBox) {
+        mesh.updateMatrixWorld(true);
+        const b = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+        allBoxes.push(b);
+      }
+    });
+    collisionBoxesRef.current = allBoxes;
     wallMeshesRef.current = dt.wallMeshes;
     obstacleMeshesRef.current = dt.obstacleMeshes;
 
@@ -407,68 +516,71 @@ export default function SplatViewer({
             .multiplyScalar(-moveVec.z * speed * delta)
             .add(right.clone().multiplyScalar(moveVec.x * speed * delta));
 
-          // Sub-step collision detection to prevent any tunneling through walls/obstacles
-          const subStepCount = Math.max(1, Math.ceil(totalDeltaMovement.length() / 0.08));
+          // Sub-step continuous collision resolution (impermeable walls & furniture)
+          const subStepCount = Math.max(1, Math.ceil(totalDeltaMovement.length() / 0.05));
           const stepVec = totalDeltaMovement.clone().divideScalar(subStepCount);
-          const playerRadius = 0.35; // Generous physical clearance
+          const playerRadius = 0.40;
 
           for (let step = 0; step < subStepCount; step++) {
-            const nextCandidate = playerPos.current.clone().add(stepVec);
-
-            // 1. Test full candidate
-            const testBox = new THREE.Box3(
-              new THREE.Vector3(nextCandidate.x - playerRadius, 0.05, nextCandidate.z - playerRadius),
-              new THREE.Vector3(nextCandidate.x + playerRadius, 2.0, nextCandidate.z + playerRadius)
-            );
-
-            let collides = false;
-            for (const box of collisionBoxesRef.current) {
-              if (box.intersectsBox(testBox)) {
-                collides = true;
-                break;
-              }
-            }
-
-            if (!collides) {
-              playerPos.current.copy(nextCandidate);
-            } else {
-              // Wall sliding on X
-              const tryX = new THREE.Vector3(nextCandidate.x, 0, playerPos.current.z);
-              const boxX = new THREE.Box3(
-                new THREE.Vector3(tryX.x - playerRadius, 0.05, tryX.z - playerRadius),
-                new THREE.Vector3(tryX.x + playerRadius, 2.0, tryX.z + playerRadius)
-              );
-              let collidesX = false;
-              for (const box of collisionBoxesRef.current) {
-                if (box.intersectsBox(boxX)) { collidesX = true; break; }
-              }
-              if (!collidesX) {
-                playerPos.current.x = tryX.x;
-              } else {
-                // Wall sliding on Z
-                const tryZ = new THREE.Vector3(playerPos.current.x, 0, nextCandidate.z);
-                const boxZ = new THREE.Box3(
-                  new THREE.Vector3(tryZ.x - playerRadius, 0.05, tryZ.z - playerRadius),
-                  new THREE.Vector3(tryZ.x + playerRadius, 2.0, tryZ.z + playerRadius)
-                );
-                let collidesZ = false;
-                for (const box of collisionBoxesRef.current) {
-                  if (box.intersectsBox(boxZ)) { collidesZ = true; break; }
-                }
-                if (!collidesZ) {
-                  playerPos.current.z = tryZ.z;
-                }
-              }
-            }
+            const candX = playerPos.current.x + stepVec.x;
+            const candZ = playerPos.current.z + stepVec.z;
+            const resolved = resolvePlayerCollision(candX, candZ, playerRadius, collisionBoxesRef.current);
+            playerPos.current.x = resolved.x;
+            playerPos.current.z = resolved.z;
           }
 
-          // Safe perimeter bounds clamp
-          const boundX = preset === 'home' ? 7.1 : 15.8;
-          const boundZmin = preset === 'home' ? -7.0 : -10.6;
-          const boundZmax = preset === 'home' ? 9.5 : 10.6;
+          // Safe perimeter bounds clamp strictly per dataset
+          let boundX = 6.9;
+          let boundZmin = -6.8;
+          let boundZmax = 9.3;
+
+          if (presetRef.current === 'office') {
+            boundX = 12.5;
+            boundZmin = -8.0;
+            boundZmax = 8.0;
+          } else if (presetRef.current === 'custom_room' && customRoomRef.current) {
+            boundX = (customRoomRef.current.dimensions.width / 2) - 0.35;
+            boundZmin = -(customRoomRef.current.dimensions.depth / 2) + 0.35;
+            boundZmax = (customRoomRef.current.dimensions.depth / 2) - 0.35;
+          }
 
           playerPos.current.x = Math.max(-boundX, Math.min(boundX, playerPos.current.x));
           playerPos.current.z = Math.max(boundZmin, Math.min(boundZmax, playerPos.current.z));
+        }
+
+        // Automatic roaming along active navigation route
+        if (isAutoRoamingRef.current && activePath && activePath.coordinates.length > 1) {
+          const tgt = activePath.coordinates[autoRoamIndex.current];
+          if (tgt) {
+            const dir = new THREE.Vector3(tgt[0] - playerPos.current.x, 0, tgt[2] - playerPos.current.z);
+            const dist = dir.length();
+
+            if (dist < 0.5) {
+              if (autoRoamIndex.current < activePath.coordinates.length - 1) {
+                autoRoamIndex.current += 1;
+                onStepChangeRef.current?.(autoRoamIndex.current);
+              } else {
+                onAutoRoamCompleteRef.current?.();
+              }
+            } else {
+              dir.normalize();
+              const autoSpeed = 2.2; // Smooth walking pace
+              const stepDist = autoSpeed * delta;
+              const candX = playerPos.current.x + dir.x * Math.min(stepDist, dist);
+              const candZ = playerPos.current.z + dir.z * Math.min(stepDist, dist);
+              const resolved = resolvePlayerCollision(candX, candZ, 0.40, collisionBoxesRef.current);
+              playerPos.current.x = resolved.x;
+              playerPos.current.z = resolved.z;
+
+              // Smoothly steer camera yaw toward travel direction
+              const targetYaw = Math.atan2(-dir.x, -dir.z);
+              let diffYaw = targetYaw - cameraEuler.current.y;
+              while (diffYaw < -Math.PI) diffYaw += Math.PI * 2;
+              while (diffYaw > Math.PI) diffYaw -= Math.PI * 2;
+              cameraEuler.current.y += diffYaw * Math.min(1, delta * 5.0);
+              camera.quaternion.setFromEuler(cameraEuler.current);
+            }
+          }
         }
 
         // Update Avatar Position and Rotation
@@ -595,6 +707,24 @@ export default function SplatViewer({
         viewerRef.current.render();
       } else {
         renderer.render(scene, camera);
+      }
+
+      // Real-time active room detection
+      const px = playerPos.current.x;
+      const pz = playerPos.current.z;
+      const currentActiveZones = presetRef.current === 'custom_room'
+        ? (customRoomRef.current?.zones || [])
+        : presetRef.current === 'home'
+          ? HOME_ROOM_ZONES
+          : OFFICE_ROOM_ZONES;
+
+      const detectedZone = currentActiveZones.find(
+        (z) => px >= z.bounds.minX && px <= z.bounds.maxX && pz >= z.bounds.minZ && pz <= z.bounds.maxZ
+      ) || null;
+
+      if (detectedZone?.id !== lastDetectedZoneIdRef.current) {
+        lastDetectedZoneIdRef.current = detectedZone?.id || null;
+        onRoomChangeRef.current?.(detectedZone);
       }
 
       // Telemetry update
@@ -845,29 +975,60 @@ export default function SplatViewer({
           }
         }
 
-        // 2. Check for Obstacle / Furniture clicks (Making obstacles traceable)
+        // 2. Check for Obstacle / Furniture clicks -> Trigger SOP naming & inspection on tap
         if (obstacleMeshesRef.current.length > 0 && !isAddingPOI) {
           const obsIntersects = raycaster.intersectObjects(obstacleMeshesRef.current, false);
           if (obsIntersects.length > 0) {
-            const hitObstacle = obsIntersects[0].object;
-            if (hitObstacle.userData && hitObstacle.userData.name) {
-              setInspectedObstacle(hitObstacle.userData.name);
-              setTimeout(() => setInspectedObstacle(null), 3500);
-              return;
-            }
+            const hit = obsIntersects[0];
+            const hitObstacle = hit.object;
+            const objName = (hitObstacle.userData && hitObstacle.userData.name)
+              ? hitObstacle.userData.name
+              : 'Room Asset';
+
+            setInspectedObstacle(objName);
+            onTapObjectRef.current?.({
+              name: objName,
+              position: [
+                Math.round(hit.point.x * 10) / 10,
+                0.4,
+                Math.round(hit.point.z * 10) / 10
+              ]
+            });
+            return;
           }
         }
 
         // 3. Check for Room Zone clicks
-        if (zoneGroupRef.current && zoneGroupRef.current.children.length > 0 && !isAddingPOI) {
+        if (zoneGroupRef.current && !isAddingPOI) {
           const zoneIntersects = raycaster.intersectObjects(zoneGroupRef.current.children, true);
+          let foundZone: RoomZone | null = null;
           if (zoneIntersects.length > 0) {
             for (const hit of zoneIntersects) {
               if (hit.object && hit.object.userData && hit.object.userData.zone) {
-                onSelectZoneRef.current?.(hit.object.userData.zone);
-                return;
+                foundZone = hit.object.userData.zone;
+                break;
               }
             }
+          }
+          if (!foundZone) {
+            const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const hitPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(floorPlane, hitPoint);
+            if (hitPoint && Number.isFinite(hitPoint.x) && Number.isFinite(hitPoint.z)) {
+              const currentActiveZones = presetRef.current === 'custom_room'
+                ? (customRoomRef.current?.zones || [])
+                : presetRef.current === 'home'
+                  ? HOME_ROOM_ZONES
+                  : OFFICE_ROOM_ZONES;
+
+              foundZone = currentActiveZones.find(
+                (z) => hitPoint.x >= z.bounds.minX && hitPoint.x <= z.bounds.maxX && hitPoint.z >= z.bounds.minZ && hitPoint.z <= z.bounds.maxZ
+              ) || null;
+            }
+          }
+          if (foundZone) {
+            onSelectZoneRef.current?.(foundZone);
+            return;
           }
         }
 

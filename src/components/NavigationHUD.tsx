@@ -4,6 +4,8 @@ import {
   CornerUpLeft,
   CornerUpRight,
   MapPin,
+  Play,
+  Pause,
   X
 } from 'lucide-react';
 
@@ -12,13 +14,17 @@ export interface NavigationHUDProps {
   targetPOI: POI;
   onCancel: () => void;
   currentStepIndex: number;
+  isAutoRoaming?: boolean;
+  onToggleAutoRoam?: () => void;
 }
 
 export default function NavigationHUD({
   path,
   targetPOI,
   onCancel,
-  currentStepIndex = 0
+  currentStepIndex = 0,
+  isAutoRoaming = false,
+  onToggleAutoRoam
 }: NavigationHUDProps) {
   const currentInstruction = path.turnInstructions[currentStepIndex] || path.turnInstructions[0];
 
@@ -29,7 +35,7 @@ export default function NavigationHUD({
       case 'right':
         return <CornerUpRight size={24} className="nav-turn-icon" />;
       case 'arrive':
-        return <MapPin size={24} className="nav-turn-icon" />;
+        return <MapPin size={24} className="nav-turn-icon text-amber-400" />;
       case 'straight':
       default:
         return <ArrowUp size={24} className="nav-turn-icon" />;
@@ -46,17 +52,37 @@ export default function NavigationHUD({
         <div className="nav-distance-text">
           {currentInstruction.distanceMeters > 0
             ? `${currentInstruction.distanceMeters} m`
-            : 'Arriving'}
+            : 'Arriving at Destination'}
         </div>
         <div className="nav-instruction-title">
           {currentInstruction.text}
         </div>
         <div className="nav-sub-meta">
-          <span>Destination: {targetPOI.name}</span>
+          <span>Target: {targetPOI.name}</span>
           <span className="dot-sep">•</span>
-          <span>{path.totalDistanceMeters} m total ({path.estimatedWalkingSeconds}s)</span>
+          <span>{path.totalDistanceMeters}m route ({path.estimatedWalkingSeconds}s)</span>
         </div>
       </div>
+
+      {onToggleAutoRoam && (
+        <button
+          className={`nav-roam-action-btn ${isAutoRoaming ? 'active' : ''}`}
+          onClick={onToggleAutoRoam}
+          title={isAutoRoaming ? 'Pause auto-walk' : 'Auto roam along this accurate route'}
+        >
+          {isAutoRoaming ? (
+            <>
+              <Pause size={14} />
+              <span>Pause</span>
+            </>
+          ) : (
+            <>
+              <Play size={14} />
+              <span>Roam to Target</span>
+            </>
+          )}
+        </button>
+      )}
 
       <button className="nav-exit-btn" onClick={onCancel} title="Exit navigation">
         <X size={18} />

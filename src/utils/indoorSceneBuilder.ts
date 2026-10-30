@@ -318,11 +318,8 @@ export function buildIndoorDigitalTwin(
     let floorColor = 0xe2e8f0;
     let roughness = 0.5;
 
-    if (preset === 'custom_room' && customRoom) {
-      floorColor = customRoom.palette.floorColor || 0xd7ccc8;
-      roughness = customRoom.palette.floorRoughness || 0.45;
-    } else if (zone.type === 'living') {
-      floorColor = 0xd7ccc8; // Warm oak hardwood (matching reference image)
+    if (zone.type === 'living') {
+      floorColor = (preset === 'custom_room' && customRoom?.palette?.floorColor) ? customRoom.palette.floorColor : 0xd7ccc8; // Warm oak hardwood (matching reference image)
       roughness = 0.38;
     } else if (zone.type === 'bedroom') {
       floorColor = 0xc4b5a5; // Warm bedroom parquet
@@ -676,16 +673,47 @@ export function buildIndoorDigitalTwin(
       metalness: 0.04
     });
 
-    // 1. Perimeter Walls with 1.4m cutaway height
-    addWall(0, -halfD, W, 0.28, defaultWallHeight, customWallMat); // North wall
-    addWall(-halfW, 0, 0.28, D, defaultWallHeight, customWallMat); // West wall
-    addWall(halfW, 0, 0.28, D, defaultWallHeight, customWallMat);  // East wall
+    // 1. Exterior Perimeter Walls with 1.35m cutaway height
+    addWall(0, -halfD, W, 0.28, defaultWallHeight, customWallMat); // North perimeter
+    addWall(-halfW, 0, 0.28, D, defaultWallHeight, customWallMat); // West perimeter
+    addWall(halfW, 0, 0.28, D, defaultWallHeight, customWallMat);  // East perimeter
 
-    // South wall with entrance doorway opening
-    const doorOpening = 1.35;
+    // South perimeter wall with main entrance doorway opening
+    const doorOpening = 1.4;
     const sideWallLen = (W - doorOpening) / 2;
     addWall(-halfW + sideWallLen / 2, halfD, sideWallLen, 0.28, defaultWallHeight, customWallMat);
     addWall(halfW - sideWallLen / 2, halfD, sideWallLen, 0.28, defaultWallHeight, customWallMat);
+
+    // 2. Interior Partition Walls & Doorways for Multi-Room Segmentation
+    if (customRoom.zones && customRoom.zones.length > 1) {
+      if (customRoom.roomType === 'office') {
+        // Office layout partition walls
+        // West spine wall with doorways into Reception & Workstations
+        addWall(-0.6, -4.5, 0.2, 4.0, defaultWallHeight, customWallMat);
+        addWall(-0.6, 4.5, 0.2, 4.0, defaultWallHeight, customWallMat);
+        // East spine wall with doorways into Boardroom & Breakout
+        addWall(0.6, -4.5, 0.2, 4.0, defaultWallHeight, customWallMat);
+        addWall(0.6, 4.5, 0.2, 4.0, defaultWallHeight, customWallMat);
+      } else {
+        // Apartment / Multi-Room partition walls
+        // Central North-South partition wall (x = 0.5) separating West from East wings
+        addWall(0.5, -4.0, 0.22, 5.5, defaultWallHeight, customWallMat); // North segment (Bed/Study divider)
+        addWall(0.5, 4.2, 0.22, 5.2, defaultWallHeight, customWallMat);  // South segment (Living/Kitchen divider)
+        // Doorway at center x=0.5, z=[-0.8, 1.2] is left clear for transit!
+
+        // West wing East-West partition wall (z = -0.5) separating Master Bed from Living Room
+        // Leave 1.3m doorway open near corridor (x = -1.2)
+        addWall(-4.2, -0.5, 5.0, 0.22, defaultWallHeight, customWallMat);
+
+        // East wing East-West partition wall (z = 0.5) separating Study from Kitchen
+        // Leave 1.3m doorway open near corridor (x = 1.2)
+        addWall(4.2, 0.5, 5.0, 0.22, defaultWallHeight, customWallMat);
+
+        // Terrace divider wall with doorway opening
+        addWall(-5.0, 7.0, 3.5, 0.2, defaultWallHeight, customWallMat);
+        addWall(-0.5, 7.0, 1.8, 0.2, defaultWallHeight, customWallMat);
+      }
+    }
 
     // Palette extracted from video
     const videoPalette = {
@@ -695,84 +723,89 @@ export function buildIndoorDigitalTwin(
       screenGlow: customRoom.palette.techColor || 0x38bdf8
     };
 
-    // 2. Synthesize High-Detail Furniture Suites with Video Colors matching roomType
-    if (customRoom.roomType === 'bedroom' || customRoom.detectedObstacles.some((o) => o.type === 'bed')) {
+    // 3. Synthesize Authentic Furniture Suites in EACH Recognized Room Zone
+    if (customRoom.zones && customRoom.zones.length > 0) {
+      customRoom.zones.forEach((zone) => {
+        // Add realistic downlight in the center of each recognized room
+        addDownlight(zone.center[0], 2.2, zone.center[2], 0xffedd5, 1.85, 7.0);
+
+        if (zone.type === 'living') {
+          const living = buildLivingRoomSuite(zone.center[0] - 0.4, 0, zone.center[2] - 0.4, 0, videoPalette);
+          architectureGroup.add(living.group);
+          obstacleBoxes.push(living.collisionBox);
+          obstacleMeshes.push(...living.meshes);
+
+          const tv = buildSmartTVMediaUnit(zone.center[0], 0, zone.bounds.maxZ - 0.5, Math.PI, videoPalette);
+          architectureGroup.add(tv.group);
+          obstacleBoxes.push(tv.collisionBox);
+          obstacleMeshes.push(...tv.meshes);
+
+          architectureGroup.add(buildPottedPlant(zone.bounds.minX + 0.6, 0, zone.bounds.maxZ - 0.6, 1.05));
+        } else if (zone.type === 'kitchen') {
+          const kitchen = buildKitchenSuite(zone.center[0], 0, zone.center[2], 0, videoPalette);
+          architectureGroup.add(kitchen.group);
+          obstacleBoxes.push(kitchen.collisionBox);
+          obstacleMeshes.push(...kitchen.meshes);
+        } else if (zone.type === 'bedroom') {
+          const bed = buildMasterBedSuite(zone.center[0], 0, zone.center[2] - 0.6, 0, videoPalette);
+          architectureGroup.add(bed.group);
+          obstacleBoxes.push(bed.collisionBox);
+          obstacleMeshes.push(...bed.meshes);
+
+          addSolidObstacle('Wardrobe Storage', zone.bounds.minX + 0.6, 0, zone.center[2], 0.9, 2.1, 2.2, videoPalette.woodTone);
+        } else if (zone.type === 'study') {
+          const ws = buildComputerWorkstation(zone.center[0], 0, zone.center[2] - 0.6, 0, videoPalette);
+          architectureGroup.add(ws.group);
+          obstacleBoxes.push(ws.collisionBox);
+          obstacleMeshes.push(...ws.meshes);
+
+          architectureGroup.add(buildWhiteboardStand(zone.bounds.maxX - 0.8, 0, zone.bounds.minZ + 1.2, -Math.PI / 2));
+          addSolidObstacle('Reference Bookshelf', zone.bounds.maxX - 0.5, 0, zone.center[2], 0.6, 1.8, 1.8, videoPalette.woodTone);
+        } else if (zone.type === 'balcony') {
+          const balcony = buildTerraceBalconySuite(zone.center[0], 0, zone.center[2], 0);
+          architectureGroup.add(balcony.group);
+          obstacleBoxes.push(balcony.collisionBox);
+          obstacleMeshes.push(...balcony.meshes);
+        } else if (zone.type === 'hallway') {
+          // Entryway console & threshold
+          addSolidObstacle('Entry Key Console', zone.bounds.maxX - 0.35, 0, zone.center[2], 0.45, 0.85, 0.95, videoPalette.woodTone);
+        } else if (zone.type === 'office') {
+          if (zone.id.includes('conference')) {
+            const conf = buildConferenceCabin(zone.center[0], 0, zone.center[2], 6.0, 5.0, 0, videoPalette);
+            architectureGroup.add(conf.group);
+            obstacleBoxes.push(conf.collisionBox);
+            obstacleMeshes.push(...conf.meshes);
+          } else if (zone.id.includes('workstation')) {
+            const wsBench = buildWorkstationBenchCluster(zone.center[0], 0, zone.center[2], 0, videoPalette);
+            architectureGroup.add(wsBench.group);
+            obstacleBoxes.push(wsBench.collisionBox);
+            obstacleMeshes.push(...wsBench.meshes);
+          } else if (zone.id.includes('reception')) {
+            const rec = buildReceptionDeskSuite(zone.center[0], 0, zone.center[2], 0, videoPalette);
+            architectureGroup.add(rec.group);
+            obstacleBoxes.push(rec.collisionBox);
+            obstacleMeshes.push(...rec.meshes);
+          } else {
+            const lounge = buildOfficeLoungeBreakout(zone.center[0], 0, zone.center[2], 0, videoPalette);
+            architectureGroup.add(lounge.group);
+            obstacleBoxes.push(lounge.collisionBox);
+            obstacleMeshes.push(...lounge.meshes);
+          }
+        }
+      });
+    } else {
+      // Fallback single room suite
       const bed = buildMasterBedSuite(0, 0, -halfD + 1.8, 0, videoPalette);
       architectureGroup.add(bed.group);
       obstacleBoxes.push(bed.collisionBox);
       obstacleMeshes.push(...bed.meshes);
 
-      // Workstation desk in corner
       const ws = buildComputerWorkstation(halfW - 1.2, 0, 0, -Math.PI / 2, videoPalette);
       architectureGroup.add(ws.group);
       obstacleBoxes.push(ws.collisionBox);
       obstacleMeshes.push(...ws.meshes);
-    } else if (customRoom.roomType === 'study' || customRoom.roomType === 'office') {
-      const ws = buildComputerWorkstation(0, 0, -halfD + 1.2, 0, videoPalette);
-      architectureGroup.add(ws.group);
-      obstacleBoxes.push(ws.collisionBox);
-      obstacleMeshes.push(...ws.meshes);
-
-      // Bookshelf / storage cabinet
-      addSolidObstacle('Storage Unit', -halfW + 0.6, 0, 0, 0.8, 1.4, 2.0, videoPalette.woodTone);
-    } else if (customRoom.roomType === 'living') {
-      const living = buildLivingRoomSuite(0, 0, 0.5, 0, videoPalette);
-      architectureGroup.add(living.group);
-      obstacleBoxes.push(living.collisionBox);
-      obstacleMeshes.push(...living.meshes);
-
-      const tv = buildSmartTVMediaUnit(0, 0, halfD - 0.5, Math.PI, videoPalette);
-      architectureGroup.add(tv.group);
-      obstacleBoxes.push(tv.collisionBox);
-      obstacleMeshes.push(...tv.meshes);
-    } else {
-      // General Room: place workstations, tv, and seating using video palette
-      const ws = buildComputerWorkstation(-halfW + 1.2, 0, -halfD + 1.2, 0, videoPalette);
-      architectureGroup.add(ws.group);
-      obstacleBoxes.push(ws.collisionBox);
-      obstacleMeshes.push(...ws.meshes);
-
-      const tv = buildSmartTVMediaUnit(halfW - 1.2, 0, 0, -Math.PI / 2, videoPalette);
-      architectureGroup.add(tv.group);
-      obstacleBoxes.push(tv.collisionBox);
-      obstacleMeshes.push(...tv.meshes);
     }
-
-    // 3. Dense 3D Gaussian Point Cloud Splats (Sampled directly from video frames)
-    if (customRoom.pointCloudData && customRoom.pointCloudData.length > 0) {
-      const pcData = customRoom.pointCloudData;
-      const count = Math.floor(pcData.length / 6);
-      const positions = new Float32Array(count * 3);
-      const colors = new Float32Array(count * 3);
-
-      for (let i = 0; i < count; i++) {
-        const srcIdx = i * 6;
-        const dstIdx = i * 3;
-        positions[dstIdx] = pcData[srcIdx];
-        positions[dstIdx + 1] = pcData[srcIdx + 1];
-        positions[dstIdx + 2] = pcData[srcIdx + 2];
-
-        colors[dstIdx] = pcData[srcIdx + 3];
-        colors[dstIdx + 1] = pcData[srcIdx + 4];
-        colors[dstIdx + 2] = pcData[srcIdx + 5];
-      }
-
-      const pointGeo = new THREE.BufferGeometry();
-      pointGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      pointGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-      const pointMat = new THREE.PointsMaterial({
-        size: 0.045,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.88,
-        sizeAttenuation: true
-      });
-
-      const pointsMesh = new THREE.Points(pointGeo, pointMat);
-      pointsMesh.name = 'custom-room-pointcloud-splats';
-      architectureGroup.add(pointsMesh);
-    }
+    // Clean solid architectural mesh generation (floating point cloud noise eliminated)
   }
 
   // =========================================================================
@@ -874,6 +907,7 @@ export function createPOIMarkerMesh(
   if (poi.category === 'safety') badgeColor = 0xf43f5e;
   if (poi.category === 'amenity') badgeColor = 0x34d399;
   if (poi.category === 'tech') badgeColor = 0xa855f7;
+  if (poi.category === 'sop') badgeColor = 0xf59e0b; // Amber gold for SOP points
 
   // 1. Illuminated Ground Target Dot
   const targetDotGeo = new THREE.CircleGeometry(0.08, 24);
@@ -932,10 +966,11 @@ export function createPOIMarkerMesh(
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
     ctx.stroke();
 
-    // Weather / status icon (snowflake / sun icon like reference image)
+    // Weather / status icon (snowflake / sun / SOP icon)
     ctx.fillStyle = '#ffffff';
     ctx.font = '22px Inter, sans-serif';
-    ctx.fillText('❄️', 36, 72);
+    const statusIcon = poi.category === 'sop' ? '📋' : poi.category === 'safety' ? '🧯' : poi.category === 'tech' ? '💻' : '❄️';
+    ctx.fillText(statusIcon, 36, 72);
 
     // Title text: uppercase clean modern sans-serif
     ctx.fillStyle = '#ffffff';
@@ -945,10 +980,10 @@ export function createPOIMarkerMesh(
     const displayName = poi.name.toUpperCase();
     ctx.fillText(displayName, 76, 52, 280);
 
-    // Sub-text: Percentage or room type badge (e.g. "37% OPTIMAL" or "24.5°C")
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    // Sub-text: Percentage or room type badge (e.g. "SOP • CHECKPOINT" or "37% OPTIMAL")
+    ctx.fillStyle = poi.category === 'sop' ? '#fbbf24' : 'rgba(255, 255, 255, 0.7)';
     ctx.font = '500 22px "JetBrains Mono", monospace';
-    const subLabel = poi.category === 'room' ? '37% OPTIMAL' : `${poi.category.toUpperCase()}`;
+    const subLabel = poi.category === 'sop' ? 'SOP • CHECKPOINT' : poi.category === 'room' ? '37% OPTIMAL' : `${poi.category.toUpperCase()}`;
     ctx.fillText(subLabel, 76, 88, 380);
   }
 

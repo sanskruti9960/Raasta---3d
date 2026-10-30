@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Video,
   Upload,
@@ -10,7 +10,9 @@ import {
   Sparkles,
   Zap,
   Download,
-  Footprints
+  Footprints,
+  Compass,
+  Layers
 } from 'lucide-react';
 import type { CustomRoomData } from '../types/spatial';
 import {
@@ -25,6 +27,7 @@ export interface UploadModalProps {
   onLoadModel: (url: string, name: string) => void;
   currentModelName: string;
   onCustomRoomLoaded?: (room: CustomRoomData) => void;
+  initialVideoFile?: File | null;
 }
 
 export default function UploadModal({
@@ -32,7 +35,8 @@ export default function UploadModal({
   onClose,
   onLoadModel,
   currentModelName,
-  onCustomRoomLoaded
+  onCustomRoomLoaded,
+  initialVideoFile
 }: UploadModalProps) {
   // Tab state
   const [activeTab, setActiveTab] = useState<'video' | 'file' | 'url'>('video');
@@ -40,9 +44,10 @@ export default function UploadModal({
   // Video Conversion State
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
-  const [roomNameInput, setRoomNameInput] = useState('My Room Digital Twin');
-  const [roomTypeInput, setRoomTypeInput] = useState<'bedroom' | 'living' | 'study' | 'studio' | 'office' | 'general'>('bedroom');
+  const [roomNameInput, setRoomNameInput] = useState('My Indoor Space 3D Twin');
+  const [roomTypeInput, setRoomTypeInput] = useState<'multi_room' | 'apartment' | 'bedroom' | 'living' | 'study' | 'office' | 'general'>('apartment');
   const [isConverting, setIsConverting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [conversionProgress, setConversionProgress] = useState<ConversionProgress | null>(null);
   const [convertedRoom, setConvertedRoom] = useState<CustomRoomData | null>(null);
 
@@ -51,22 +56,77 @@ export default function UploadModal({
   const [selectedFileName, setSelectedFileName] = useState('');
   const videoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastProcessedVideoRef = useRef<File | null>(null);
+
+  // Execute end-to-end video grinding and multi-room 3D reconstruction
+  const startConversion = useCallback(
+    async (
+      fileToConvert: File,
+      nameToUse: string,
+      typeToUse: 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'study' | 'office' | 'general'
+    ) => {
+      setIsConverting(true);
+      setConversionProgress({
+        stage: 'Initializing video-to-3D grinding pipeline...',
+        percent: 5,
+        details: 'Preparing monocular spatial frame extraction & feature tracker...'
+      });
+
+      try {
+        const roomData = await convertRoomVideoTo3D(
+          fileToConvert,
+          nameToUse.trim() || 'My Indoor Space Digital Twin',
+          typeToUse,
+          (progress) => {
+            setConversionProgress(progress);
+          }
+        );
+
+        setConvertedRoom(roomData);
+        setIsConverting(false);
+      } catch (err) {
+        console.error('Video conversion failed:', err);
+        setIsConverting(false);
+      }
+    },
+    []
+  );
+
+  // Handle Video Selection - Automatically initiates grinding in one go
+  const handleVideoFileSelected = useCallback(
+    (file: File) => {
+      setVideoFile(file);
+      const url = URL.createObjectURL(file);
+      setVideoPreviewUrl(url);
+      setConvertedRoom(null);
+      setConversionProgress(null);
+
+      // Format human-readable model name from file
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+      const formattedName = cleanName && cleanName.length > 2
+        ? cleanName.charAt(0).toUpperCase() + cleanName.slice(1) + ' 3D Twin'
+        : 'Indoor Space 3D Twin';
+      setRoomNameInput(formattedName);
+
+      // Auto-start the grinding immediately whenever video is added
+      startConversion(file, formattedName, roomTypeInput);
+    },
+    [roomTypeInput, startConversion]
+  );
+
+  // Auto-grind dropped initial video whenever modal opens with one
+  useEffect(() => {
+    if (initialVideoFile && isOpen && lastProcessedVideoRef.current !== initialVideoFile) {
+      lastProcessedVideoRef.current = initialVideoFile;
+      const timer = setTimeout(() => {
+        setActiveTab('video');
+        handleVideoFileSelected(initialVideoFile);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [initialVideoFile, isOpen, handleVideoFileSelected]);
 
   if (!isOpen) return null;
-
-  // Handle Video Selection
-  const handleVideoFileSelected = (file: File) => {
-    setVideoFile(file);
-    const url = URL.createObjectURL(file);
-    setVideoPreviewUrl(url);
-    setConvertedRoom(null);
-    setConversionProgress(null);
-    // Suggest name based on filename
-    const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
-    if (cleanName && cleanName.length > 2) {
-      setRoomNameInput(cleanName.charAt(0).toUpperCase() + cleanName.slice(1) + ' 3D Twin');
-    }
-  };
 
   const handleVideoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -75,60 +135,45 @@ export default function UploadModal({
     }
   };
 
-  // 1-Click Sample Video test
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleVideoFileSelected(file);
+    }
+  };
+
+  // 1-Click Sample Multi-Room Video Scan Test
   const handleLoadSampleVideo = async () => {
     setIsConverting(true);
     setConversionProgress({
-      stage: 'Generating sample room scan video...',
+      stage: 'Generating multi-room camera tour stream...',
       percent: 5,
-      details: 'Creating camera pan stream across indoor room...'
+      details: 'Simulating slow-pan walkthrough across Foyer, Living, Kitchen & Bedroom...'
     });
 
     try {
       const sampleFile = await createSampleRoomVideoBlob();
       handleVideoFileSelected(sampleFile);
-      setRoomNameInput('Sample Room Digital Twin');
-      // Automatically trigger conversion for instant test
-      await startConversion(sampleFile, 'Sample Room Digital Twin', 'bedroom');
-    } catch {
-      setIsConverting(false);
-    }
-  };
-
-  // Execute minimum-time video to 3D conversion
-  const startConversion = async (
-    fileToConvert: File,
-    nameToUse: string,
-    typeToUse: 'bedroom' | 'living' | 'study' | 'studio' | 'office' | 'general'
-  ) => {
-    setIsConverting(true);
-    setConversionProgress({
-      stage: 'Initializing video-to-3D reconstruction engine',
-      percent: 10,
-      details: 'Optimized for minimum processing time...'
-    });
-
-    try {
-      const roomData = await convertRoomVideoTo3D(
-        fileToConvert,
-        nameToUse.trim() || 'My Room Digital Twin',
-        typeToUse,
-        (progress) => {
-          setConversionProgress(progress);
-        }
-      );
-
-      setConvertedRoom(roomData);
-      setIsConverting(false);
+      setRoomNameInput('Sample Apartment Digital Twin');
     } catch (err) {
-      console.error('Video conversion failed:', err);
+      console.error('Failed to create sample video:', err);
       setIsConverting(false);
     }
-  };
-
-  const handleStartConversionClick = () => {
-    if (!videoFile) return;
-    startConversion(videoFile, roomNameInput, roomTypeInput);
   };
 
   // Launch reconstructed 3D room into application
@@ -191,16 +236,16 @@ export default function UploadModal({
         {/* Header */}
         <div className="google-dialog-header">
           <div className="flex items-center gap-2">
-            <Video className="text-blue" size={22} />
-            <h2 className="dialog-title">Indoor 3D Mapping & Video Reconstruction</h2>
+            <Compass className="text-blue" size={22} />
+            <h2 className="dialog-title">Indoor 3D Spatial Reconstruction Engine</h2>
           </div>
-          <button className="dialog-close-btn" onClick={onClose}>
+          <button className="dialog-close-btn" onClick={onClose} title="Close dialog">
             <X size={18} />
           </button>
         </div>
 
         <p className="dialog-subtitle">
-          Active: <span className="font-semibold text-gray-800">{currentModelName}</span> • Upload a video of your room to convert it into a 3D digital twin in minimum time.
+          Active: <span className="font-semibold text-gray-800">{currentModelName}</span> • Drop any indoor video capture to extract multi-room boundaries and generate an interactive 3D digital twin.
         </p>
 
         {/* Tab switch */}
@@ -210,7 +255,7 @@ export default function UploadModal({
             onClick={() => setActiveTab('video')}
           >
             <Video size={15} />
-            <span>Room Video to 3D (Instant)</span>
+            <span>Room Video to 3D</span>
           </button>
           <button
             className={`tab-item ${activeTab === 'file' ? 'active' : ''}`}
@@ -237,13 +282,18 @@ export default function UploadModal({
                 {!videoFile ? (
                   <div className="video-upload-area">
                     <div
-                      className="google-dropzone video-dropzone-large"
+                      className={`google-dropzone video-dropzone-large ${isDragging ? 'border-sky-500 bg-sky-500/10' : ''}`}
                       onClick={() => videoInputRef.current?.click()}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
                     >
                       <Video size={42} className="text-blue mx-auto mb-2" />
-                      <p className="dropzone-text-main">Click to upload your room scanning video</p>
+                      <p className="dropzone-text-main">
+                        {isDragging ? 'Drop video here to start grinding immediately' : 'Drop video here or click to browse'}
+                      </p>
                       <p className="dropzone-text-sub">
-                        Supports standard smartphone video (.mp4, .mov, .webm, .mkv)
+                        Whenever you add a video, the engine automatically grinds it, detects all connected rooms, and converts it to 3D.
                       </p>
                       <input
                         ref={videoInputRef}
@@ -262,12 +312,12 @@ export default function UploadModal({
                         disabled={isConverting}
                       >
                         <Sparkles size={14} />
-                        <span>Try Sample Room Scan Video (1-Click Test)</span>
+                        <span>Try Sample Multi-Room Tour Video (Instant Grinding Test)</span>
                       </button>
                     </div>
                   </div>
                 ) : (
-                  /* Selected Video Info & Configuration */
+                  /* Processing / Selected Video View */
                   <div className="selected-video-container">
                     <div className="video-preview-row">
                       {videoPreviewUrl && (
@@ -278,6 +328,8 @@ export default function UploadModal({
                             controls
                             muted
                             playsInline
+                            autoPlay
+                            loop
                           />
                         </div>
                       )}
@@ -286,62 +338,62 @@ export default function UploadModal({
                           <span className="font-semibold text-gray-800 text-sm truncate">
                             {videoFile.name}
                           </span>
-                          <button
-                            className="change-video-btn"
-                            onClick={() => {
-                              setVideoFile(null);
-                              setVideoPreviewUrl(null);
-                              setConversionProgress(null);
-                            }}
-                          >
-                            Change
-                          </button>
+                          {!isConverting && (
+                            <button
+                              className="change-video-btn"
+                              onClick={() => {
+                                setVideoFile(null);
+                                setVideoPreviewUrl(null);
+                                setConversionProgress(null);
+                              }}
+                            >
+                              Change
+                            </button>
+                          )}
                         </div>
                         <span className="text-xs text-gray-500">
-                          {(videoFile.size / (1024 * 1024)).toFixed(1)} MB • Ready for 3D reconstruction
+                          {(videoFile.size / (1024 * 1024)).toFixed(1)} MB • Multi-Room 3D Grinding Pipeline Active
                         </span>
 
                         <div className="speed-badge">
                           <Zap size={12} className="text-amber-500" />
-                          <span>Optimized for minimum processing time (~2s)</span>
+                          <span>Multi-zone segmentation & 3D Gaussian Splats generation</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Room metadata inputs */}
-                    <div className="field-row mt-3">
-                      <div className="google-field-group flex-1">
-                        <label className="field-label">Room Digital Twin Name</label>
+                    {/* Space Name & Multi-Room Blueprint Preset Selector */}
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Space Name</label>
                         <input
                           type="text"
-                          className="google-text-input"
+                          className="google-text-input text-xs"
                           value={roomNameInput}
                           onChange={(e) => setRoomNameInput(e.target.value)}
-                          placeholder="e.g. My Bedroom Twin"
+                          placeholder="e.g. My Apartment Digital Twin"
                           disabled={isConverting}
                         />
                       </div>
-                      <div className="google-field-group flex-1">
-                        <label className="field-label">Room Type</label>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Decomposition Mode</label>
                         <select
-                          className="google-select-input"
+                          className="google-select-input text-xs"
                           value={roomTypeInput}
-                          onChange={(e) => setRoomTypeInput(e.target.value as 'bedroom' | 'living' | 'study' | 'studio' | 'office' | 'general')}
+                          onChange={(e) => setRoomTypeInput(e.target.value as 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'study' | 'office' | 'general')}
                           disabled={isConverting}
                         >
-                          <option value="bedroom">Bedroom Suite</option>
-                          <option value="living">Living Room & Lounge</option>
-                          <option value="studio">Studio Apartment</option>
-                          <option value="study">Workstation / Study</option>
-                          <option value="office">Office / Commercial</option>
-                          <option value="general">General Indoor Space</option>
+                          <option value="apartment">Multi-Room Apartment (6 Connected Rooms)</option>
+                          <option value="office">Innovation Hub (5 Zones: Boardroom, Pods, etc.)</option>
+                          <option value="bedroom">Master Bedroom Suite + Ensuite & Dressing</option>
+                          <option value="living">Living Lounge + Dining & Balcony</option>
                         </select>
                       </div>
                     </div>
 
-                    {/* Progress Bar (when active) */}
+                    {/* Live Grinding Progress Bar */}
                     {isConverting && conversionProgress && (
-                      <div className="conversion-progress-box">
+                      <div className="conversion-progress-box mt-3">
                         <div className="progress-top-line">
                           <span className="stage-name font-medium text-xs text-blue">
                             {conversionProgress.stage}
@@ -359,7 +411,7 @@ export default function UploadModal({
                         </div>
 
                         {conversionProgress.details && (
-                          <span className="progress-subtext text-xs text-gray-500">
+                          <span className="progress-subtext text-xs text-gray-600 mt-1 block">
                             {conversionProgress.details}
                           </span>
                         )}
@@ -368,8 +420,8 @@ export default function UploadModal({
                         {conversionProgress.keyframeThumbnails &&
                           conversionProgress.keyframeThumbnails.length > 0 && (
                             <div className="extracted-frames-preview">
-                              <span className="text-[11px] font-semibold text-gray-600 mb-1 block">
-                                Extracted Keyframes ({conversionProgress.keyframeThumbnails.length}):
+                              <span className="text-[11px] font-semibold text-gray-700 mb-1 block">
+                                Extracted Spatial Keyframes ({conversionProgress.keyframeThumbnails.length}):
                               </span>
                               <div className="frames-mini-strip">
                                 {conversionProgress.keyframeThumbnails.map((thumb, idx) => (
@@ -386,36 +438,54 @@ export default function UploadModal({
                       </div>
                     )}
 
-                    {/* Primary Action Button */}
+                    {/* Optional Re-grind trigger if not currently converting */}
                     {!isConverting && (
-                      <button
-                        className="google-btn-primary full-width mt-3"
-                        onClick={handleStartConversionClick}
-                      >
-                        <Sparkles size={16} />
-                        <span>Convert Video to 3D Digital Twin</span>
-                      </button>
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          className="google-btn-primary flex-1"
+                          onClick={() => startConversion(videoFile, roomNameInput, roomTypeInput)}
+                        >
+                          <RefreshCw size={15} />
+                          <span>Re-grind Video to 3D</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
               </>
             ) : (
-              /* Success / Conversion Completed State */
+              /* Success / Conversion Completed State with Multi-Room Breakdown */
               <div className="conversion-success-container">
                 <div className="success-banner">
                   <CheckCircle2 size={28} className="text-green-600 flex-shrink-0" />
                   <div>
-                    <h3 className="success-heading">3D Digital Twin Generated Successfully!</h3>
+                    <h3 className="success-heading">Multi-Room 3D Digital Twin Reconstructed!</h3>
                     <p className="success-sub">
-                      Converted in <span className="font-bold text-green-700">{convertedRoom.reconstructionTimeSec}s</span> (Minimum time). Ready to roam virtually.
+                      Reconstructed <span className="font-bold text-green-700">{convertedRoom.zones.length} connected rooms</span> in {convertedRoom.reconstructionTimeSec}s. Floor navigation & POIs compiled.
                     </p>
+                  </div>
+                </div>
+
+                {/* Recognized Multi-Room Zones Pill Grid */}
+                <div className="detected-rooms-container my-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                  <span className="text-xs font-bold text-slate-800 block mb-2 flex items-center gap-1.5">
+                    <Layers size={13} className="text-blue" />
+                    <span>Recognized Rooms & Usable Areas ({convertedRoom.zones.length}):</span>
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {convertedRoom.zones.map((zone) => (
+                      <div key={zone.id} className="p-2 bg-white rounded border border-slate-200 shadow-sm text-xs">
+                        <span className="font-semibold text-slate-800 block truncate">📍 {zone.name}</span>
+                        <span className="text-slate-500 font-mono text-[11px]">{zone.areaSqFt} sq.ft • Level {zone.floor}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
                 {/* Specs pill grid */}
                 <div className="room-summary-grid">
                   <div className="summary-pill">
-                    <span className="summary-lbl">Room Dimensions</span>
+                    <span className="summary-lbl">Overall Footprint</span>
                     <span className="summary-val">
                       {convertedRoom.dimensions.width}m × {convertedRoom.dimensions.depth}m
                     </span>
@@ -425,11 +495,11 @@ export default function UploadModal({
                     <span className="summary-val">{convertedRoom.pointCount.toLocaleString()} points</span>
                   </div>
                   <div className="summary-pill">
-                    <span className="summary-lbl">File Formats</span>
-                    <span className="summary-val">.splat ({convertedRoom.splatFileSizeKb} KB) & .ply</span>
+                    <span className="summary-lbl">Walkway Waypoints</span>
+                    <span className="summary-val">{Object.keys(convertedRoom.navGraph).length} NavNodes</span>
                   </div>
                   <div className="summary-pill">
-                    <span className="summary-lbl">Walkway POIs</span>
+                    <span className="summary-lbl">Indoor POIs</span>
                     <span className="summary-val">{convertedRoom.pois.length} registered</span>
                   </div>
                 </div>
@@ -437,7 +507,7 @@ export default function UploadModal({
                 {/* Keyframes Strip */}
                 {convertedRoom.keyframes && convertedRoom.keyframes.length > 0 && (
                   <div className="frames-strip-container">
-                    <span className="text-xs font-semibold text-gray-700">Video Spatial Samples:</span>
+                    <span className="text-xs font-semibold text-gray-700">Video Spatial Keyframes:</span>
                     <div className="frames-mini-strip mt-1">
                       {convertedRoom.keyframes.map((thumb, idx) => (
                         <img key={idx} src={thumb} alt={`keyframe-${idx}`} className="frame-mini-thumb" />
@@ -450,7 +520,7 @@ export default function UploadModal({
                 <div className="success-actions-col mt-4">
                   <button className="google-btn-primary full-width" onClick={handleEnter3DRoom}>
                     <Footprints size={16} />
-                    <span>Enter & Roam 3D Room Virtually</span>
+                    <span>Enter & Roam 3D Twin Now</span>
                   </button>
 
                   <div className="flex gap-2">

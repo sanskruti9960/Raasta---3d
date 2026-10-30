@@ -45,7 +45,7 @@ export interface CustomRoomData {
   extractedKeyframesCount: number;
   pointCount: number;
   reconstructionTimeSec: number;
-  roomType: 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'study' | 'studio' | 'office' | 'general';
+  roomType: 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'kitchen' | 'study' | 'studio' | 'office' | 'general';
   dimensions: {
     width: number;
     depth: number;

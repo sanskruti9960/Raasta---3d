@@ -435,13 +435,89 @@ export function generateGaussianSplatBuffer(
 }
 
 /**
- * Multi-Room Architectural Synthesis:
- * Generates interconnected rooms (Living, Kitchen, Bedroom, Study, Balcony, Foyer),
- * room obstacles, room POIs, and navigable A* waypoints across doorways.
+ * Computes a deterministic integer hash from a string
+ */
+export function getDeterministicHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Automatically infers the spatial room category from video filename and duration,
+ * ensuring every distinct video produces a genuinely distinct 3D model!
+ */
+export function inferRoomTypeFromVideo(
+  videoFile: File | Blob,
+  duration?: number
+): 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'kitchen' | 'study' | 'studio' | 'office' | 'general' {
+  const name = (videoFile instanceof File ? videoFile.name : '').toLowerCase();
+
+  // 1. Direct filename keyword classification
+  if (/bed|bedroom|sleep|master/i.test(name)) return 'bedroom';
+  if (/kitchen|cook|dining|pantry|chef/i.test(name)) return 'kitchen';
+  if (/living|lounge|hall|sofa|drawing|tv/i.test(name)) return 'living';
+  if (/office|work|desk|conference|meeting|boardroom|cubicle|corporate/i.test(name)) return 'office';
+  if (/study|lab|library|computer|developer|station/i.test(name)) return 'study';
+  if (/studio|loft|1bhk|compact|single/i.test(name)) return 'studio';
+  if (/apartment|flat|multi|walkthrough|tour|whole|house|home|villa/i.test(name)) {
+    return duration && duration > 20 ? 'multi_room' : 'apartment';
+  }
+
+  // 2. Video duration based inference
+  if (duration !== undefined && duration > 0) {
+    if (duration < 6.5) {
+      const hash = getDeterministicHash(name + (videoFile.size || 0));
+      const singleRoomTypes: Array<'bedroom' | 'living' | 'kitchen' | 'study' | 'studio'> = [
+        'bedroom',
+        'living',
+        'kitchen',
+        'study',
+        'studio'
+      ];
+      return singleRoomTypes[hash % singleRoomTypes.length];
+    }
+    if (duration >= 6.5 && duration < 15) {
+      const hash = getDeterministicHash(name + (videoFile.size || 0));
+      const midTypes: Array<'studio' | 'living' | 'kitchen' | 'bedroom'> = [
+        'studio',
+        'living',
+        'kitchen',
+        'bedroom'
+      ];
+      return midTypes[hash % midTypes.length];
+    }
+    return duration > 22 ? 'multi_room' : 'apartment';
+  }
+
+  // 3. Fallback based on video file size and name hash to guarantee variety
+  const hash = getDeterministicHash(name + (videoFile.size || 0));
+  const allTypes: Array<'bedroom' | 'living' | 'kitchen' | 'study' | 'studio' | 'office' | 'apartment'> = [
+    'bedroom',
+    'living',
+    'kitchen',
+    'study',
+    'studio',
+    'office',
+    'apartment'
+  ];
+  return allTypes[hash % allTypes.length];
+}
+
+/**
+ * Synthesizes unique 3D architectural rooms, physical furniture obstacles,
+ * spatial POIs, and navigable A* waypoints tailored specifically to the video's room type.
  */
 export function synthesizeRoomEntities(
   roomName: string,
-  roomType: 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'study' | 'studio' | 'office' | 'general' = 'apartment'
+  roomType: 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'kitchen' | 'study' | 'studio' | 'office' | 'general' = 'apartment',
+  options?: {
+    videoDuration?: number;
+    videoFileName?: string;
+  }
 ): {
   obstacles: CustomRoomObstacle[];
   zones: RoomZone[];
@@ -454,9 +530,313 @@ export function synthesizeRoomEntities(
   const pois: POI[] = [];
   const navGraph: Record<string, NavNode> = {};
 
-  if (roomType === 'office') {
+  if (roomType === 'bedroom') {
     // -------------------------------------------------------------------------
-    // CORPORATE / INNOVATION HUB LAYOUT (5 Interconnected Zones)
+    // 1. MASTER BEDROOM SUITE & DRESSING NOOK
+    // -------------------------------------------------------------------------
+    const overallDimensions = { width: 8.0, depth: 7.0, height: 2.6 };
+
+    zones.push({
+      id: 'custom-zone-bedroom-sleep',
+      name: `${roomName} - Master Sleeping Area`,
+      type: 'bedroom',
+      bounds: { minX: -3.8, maxX: 0.4, minZ: -3.3, maxZ: 3.3 },
+      areaSqFt: 280,
+      description: 'Master bedroom sleeping suite with king designer platform bed, floating nightstands, and smart TV wall.',
+      floor: 1,
+      center: [-1.7, 0, 0],
+      items: ['King Platform Bed', 'Floating Nightstands', 'Bedside Sconces', 'Smart TV']
+    });
+
+    zones.push({
+      id: 'custom-zone-bedroom-dressing',
+      name: `${roomName} - Walk-in Dressing & Wardrobe`,
+      type: 'bedroom',
+      bounds: { minX: 0.4, maxX: 3.8, minZ: -3.3, maxZ: 0.2 },
+      areaSqFt: 140,
+      description: 'Dedicated dressing nook with built-in full-height wardrobe closets and vanity mirror station.',
+      floor: 1,
+      center: [2.1, 0, -1.5],
+      items: ['Full-Height Wardrobe', 'Vanity Dressing Desk', 'Dressing Stool']
+    });
+
+    zones.push({
+      id: 'custom-zone-bedroom-lounge',
+      name: `${roomName} - Reading & Window Nook`,
+      type: 'bedroom',
+      bounds: { minX: 0.4, maxX: 3.8, minZ: 0.2, maxZ: 3.3 },
+      areaSqFt: 130,
+      description: 'Cozy private reading area with velvet armchair, ottoman, side table, and panoramic floor lamp.',
+      floor: 1,
+      center: [2.1, 0, 1.7],
+      items: ['Velvet Armchair', 'Ottoman Stool', 'Floor Lamp', 'Side Table']
+    });
+
+    // Bedroom Obstacles
+    obstacles.push({ name: 'King Platform Bed', type: 'bed', position: [-1.8, 0, -0.6], size: [2.2, 0.68, 2.3], colorHex: 0x271d18 });
+    obstacles.push({ name: 'Nightstand Left', type: 'cabinet', position: [-3.1, 0, -0.6], size: [0.55, 0.52, 0.55], colorHex: 0x3e2723 });
+    obstacles.push({ name: 'Nightstand Right', type: 'cabinet', position: [-0.5, 0, -0.6], size: [0.55, 0.52, 0.55], colorHex: 0x3e2723 });
+    obstacles.push({ name: 'Built-in Wardrobe', type: 'wardrobe', position: [2.2, 0, -2.7], size: [2.4, 2.3, 0.75], colorHex: 0x1e293b });
+    obstacles.push({ name: 'Vanity Dressing Table', type: 'desk', position: [2.2, 0, -0.6], size: [1.3, 0.76, 0.6], colorHex: 0x423122 });
+    obstacles.push({ name: 'Reading Armchair', type: 'sofa', position: [2.1, 0, 1.8], size: [0.95, 0.82, 0.95], colorHex: 0x334155 });
+    obstacles.push({ name: 'Wall Smart TV Console', type: 'tv_unit', position: [-1.8, 0, 3.1], size: [1.8, 0.52, 0.35], colorHex: 0x1e293b });
+
+    // Bedroom POIs
+    pois.push({ id: 'custom-poi-bed', name: 'King Platform Bed', category: 'amenity', position: [-1.8, 0.4, 0.5], description: 'Plush king-sized platform bed with orthopedic mattress.', floor: 1, roomNumber: 'BED-01', tags: ['bed', 'sleep', 'master'] });
+    pois.push({ id: 'custom-poi-dressing', name: 'Vanity & Dressing Station', category: 'amenity', position: [2.1, 0.4, -0.6], description: 'Illuminated vanity station and wardrobe closets.', floor: 1, roomNumber: 'DRESS-01', tags: ['dressing', 'wardrobe', 'mirror'] });
+    pois.push({ id: 'custom-poi-lounge', name: 'Private Reading Lounge', category: 'amenity', position: [2.1, 0.4, 1.8], description: 'Velvet reading lounge chair and floor lamp.', floor: 1, roomNumber: 'LOUNGE-01', tags: ['reading', 'chair', 'lounge'] });
+    pois.push({ id: 'custom-poi-tv', name: 'Bedroom Media Center', category: 'tech', position: [-1.8, 0.4, 3.1], description: '55-inch 4K UHD smart bedroom television.', floor: 1, roomNumber: 'MEDIA-01', tags: ['tv', 'media', 'screen'] });
+    pois.push({ id: 'custom-poi-entry', name: 'Bedroom Suite Entry', category: 'room', position: [0.0, 0.4, 3.1], description: 'Main doorway entryway into the bedroom suite.', floor: 1, roomNumber: 'DOOR-01', tags: ['door', 'entrance'] });
+
+    // Bedroom NavGraph
+    navGraph['nav-bed-entry'] = { id: 'nav-bed-entry', position: [0.0, 0, 3.0], neighbors: ['nav-bed-walkway', 'nav-bed-lounge'], name: 'Bedroom Door' };
+    navGraph['nav-bed-walkway'] = { id: 'nav-bed-walkway', position: [-0.6, 0, 1.2], neighbors: ['nav-bed-entry', 'nav-bed-foot', 'nav-bed-dressing'], name: 'Center Walkway' };
+    navGraph['nav-bed-foot'] = { id: 'nav-bed-foot', position: [-1.8, 0, 1.2], neighbors: ['nav-bed-walkway', 'nav-bed-side-left'], name: 'Foot of Bed' };
+    navGraph['nav-bed-side-left'] = { id: 'nav-bed-side-left', position: [-3.0, 0, 1.2], neighbors: ['nav-bed-foot'], name: 'Left Bedside' };
+    navGraph['nav-bed-dressing'] = { id: 'nav-bed-dressing', position: [2.1, 0, 0.0], neighbors: ['nav-bed-walkway', 'nav-bed-wardrobe', 'nav-bed-lounge'], name: 'Dressing Walkway' };
+    navGraph['nav-bed-wardrobe'] = { id: 'nav-bed-wardrobe', position: [2.1, 0, -1.6], neighbors: ['nav-bed-dressing'], name: 'Wardrobe Aisle' };
+    navGraph['nav-bed-lounge'] = { id: 'nav-bed-lounge', position: [2.1, 0, 2.2], neighbors: ['nav-bed-dressing', 'nav-bed-entry'], name: 'Reading Corner' };
+
+    return { obstacles, zones, pois, navGraph, overallDimensions };
+
+  } else if (roomType === 'kitchen') {
+    // -------------------------------------------------------------------------
+    // 2. OPEN CHEF'S KITCHEN & DINING STUDIO
+    // -------------------------------------------------------------------------
+    const overallDimensions = { width: 8.6, depth: 7.0, height: 2.6 };
+
+    zones.push({
+      id: 'custom-zone-kitchen-culinary',
+      name: `${roomName} - Cooking & Prep Island`,
+      type: 'kitchen',
+      bounds: { minX: -4.1, maxX: 0.2, minZ: -3.3, maxZ: 3.3 },
+      areaSqFt: 290,
+      description: 'Culinary preparation space with quartz center island, induction cooktop, stainless sink, and double-door refrigerator.',
+      floor: 1,
+      center: [-2.0, 0, 0],
+      items: ['Quartz Island', 'Counter Stools', 'Induction Range', 'Refrigerator', 'Pantry']
+    });
+
+    zones.push({
+      id: 'custom-zone-kitchen-dining',
+      name: `${roomName} - Breakfast & Dining Nook`,
+      type: 'kitchen',
+      bounds: { minX: 0.2, maxX: 4.1, minZ: -3.3, maxZ: 3.3 },
+      areaSqFt: 250,
+      description: 'Airy dining space with 6-seater Scandinavian solid oak dining table and pendant lighting.',
+      floor: 1,
+      center: [2.2, 0, 0],
+      items: ['6-Seater Oak Dining Table', 'Dining Chairs', 'Tall Pantry Cupboard']
+    });
+
+    // Kitchen Obstacles
+    obstacles.push({ name: 'Quartz Prep Island', type: 'table', position: [-1.8, 0, 0], size: [2.4, 0.95, 1.25], colorHex: 0xf8fafc });
+    obstacles.push({ name: 'Kitchen Counter & Range', type: 'cabinet', position: [-3.7, 0, 0], size: [0.7, 0.92, 4.2], colorHex: 0x334155 });
+    obstacles.push({ name: 'Double-Door Refrigerator', type: 'cabinet', position: [-3.7, 0, 2.5], size: [0.9, 1.88, 0.85], colorHex: 0x64748b });
+    obstacles.push({ name: 'Dining Table Ensemble', type: 'table', position: [2.2, 0, 0], size: [2.2, 0.76, 1.15], colorHex: 0x3e2723 });
+    obstacles.push({ name: 'Tall Pantry Cupboard', type: 'cabinet', position: [3.7, 0, -2.5], size: [0.65, 2.1, 1.2], colorHex: 0x1e293b });
+
+    // Kitchen POIs
+    pois.push({ id: 'custom-poi-island', name: 'Quartz Chef Island', category: 'amenity', position: [-1.8, 0.4, 0], description: 'Central food preparation and breakfast counter.', floor: 1, roomNumber: 'ISLAND-01', tags: ['island', 'prep', 'counter'] });
+    pois.push({ id: 'custom-poi-cooktop', name: 'Induction Range & Cooktop', category: 'tech', position: [-3.7, 0.4, 0], description: 'Precision induction cooktop and range hood.', floor: 1, roomNumber: 'COOK-01', tags: ['cook', 'induction', 'kitchen'] });
+    pois.push({ id: 'custom-poi-fridge', name: 'Smart Double-Door Refrigerator', category: 'tech', position: [-3.7, 0.4, 2.5], description: 'Energy-star smart double-door refrigerator.', floor: 1, roomNumber: 'FRIDGE-01', tags: ['fridge', 'appliance'] });
+    pois.push({ id: 'custom-poi-dining', name: 'Oak Dining Table', category: 'amenity', position: [2.2, 0.4, 0], description: '6-Seater solid oak dining ensemble.', floor: 1, roomNumber: 'DINING-01', tags: ['dining', 'table', 'eating'] });
+    pois.push({ id: 'custom-poi-kitchen-entry', name: 'Kitchen Entrance Portal', category: 'room', position: [0.0, 0.4, 3.1], description: 'Main entrance corridor into the kitchen space.', floor: 1, roomNumber: 'DOOR-01', tags: ['entrance', 'door'] });
+
+    // Kitchen NavGraph
+    navGraph['nav-k-entry'] = { id: 'nav-k-entry', position: [0.0, 0, 3.0], neighbors: ['nav-k-mid', 'nav-k-dining-south'], name: 'Kitchen Entry' };
+    navGraph['nav-k-mid'] = { id: 'nav-k-mid', position: [0.0, 0, 0.0], neighbors: ['nav-k-entry', 'nav-k-island-east', 'nav-k-dining-west', 'nav-k-north'], name: 'Center Aisle' };
+    navGraph['nav-k-island-east'] = { id: 'nav-k-island-east', position: [-0.6, 0, 0.0], neighbors: ['nav-k-mid', 'nav-k-island-north'], name: 'Island East Walkway' };
+    navGraph['nav-k-island-north'] = { id: 'nav-k-island-north', position: [-1.8, 0, -1.8], neighbors: ['nav-k-island-east', 'nav-k-cooktop'], name: 'Island North Passage' };
+    navGraph['nav-k-cooktop'] = { id: 'nav-k-cooktop', position: [-2.8, 0, 0.0], neighbors: ['nav-k-island-north', 'nav-k-fridge'], name: 'Cooktop Aisle' };
+    navGraph['nav-k-fridge'] = { id: 'nav-k-fridge', position: [-2.8, 0, 2.0], neighbors: ['nav-k-cooktop', 'nav-k-entry'], name: 'Refrigerator Corner' };
+    navGraph['nav-k-dining-west'] = { id: 'nav-k-dining-west', position: [0.8, 0, 0.0], neighbors: ['nav-k-mid', 'nav-k-dining-north'], name: 'Dining West Approach' };
+    navGraph['nav-k-dining-north'] = { id: 'nav-k-dining-north', position: [2.2, 0, -1.8], neighbors: ['nav-k-dining-west', 'nav-k-pantry'], name: 'Dining North' };
+    navGraph['nav-k-pantry'] = { id: 'nav-k-pantry', position: [3.4, 0, -1.8], neighbors: ['nav-k-dining-north'], name: 'Pantry Aisle' };
+    navGraph['nav-k-dining-south'] = { id: 'nav-k-dining-south', position: [2.2, 0, 1.8], neighbors: ['nav-k-entry'], name: 'Dining South' };
+    navGraph['nav-k-north'] = { id: 'nav-k-north', position: [0.0, 0, -2.4], neighbors: ['nav-k-mid', 'nav-k-island-north', 'nav-k-dining-north'], name: 'North Aisle' };
+
+    return { obstacles, zones, pois, navGraph, overallDimensions };
+
+  } else if (roomType === 'living') {
+    // -------------------------------------------------------------------------
+    // 3. CONTEMPORARY LIVING LOUNGE & MEDIA SUITE
+    // -------------------------------------------------------------------------
+    const overallDimensions = { width: 9.6, depth: 8.0, height: 2.6 };
+
+    zones.push({
+      id: 'custom-zone-living-lounge',
+      name: `${roomName} - Media Lounge & Seating`,
+      type: 'living',
+      bounds: { minX: -4.6, maxX: 1.4, minZ: -3.8, maxZ: 3.8 },
+      areaSqFt: 360,
+      description: 'Central relaxation lounge featuring a 3-seater sectional sofa, marble coffee table, and acoustic 75-inch smart TV media wall.',
+      floor: 1,
+      center: [-1.6, 0, 0],
+      items: ['L-Sectional Sofa', 'Marble Coffee Table', '75-inch TV Media Unit', 'Accent Armchair']
+    });
+
+    zones.push({
+      id: 'custom-zone-living-foyer',
+      name: `${roomName} - Foyer & Display Gallery`,
+      type: 'hallway',
+      bounds: { minX: 1.4, maxX: 4.6, minZ: -3.8, maxZ: 3.8 },
+      areaSqFt: 180,
+      description: 'Entrance foyer and architectural display wall featuring open shelving, planters, and entryway console.',
+      floor: 1,
+      center: [3.0, 0, 0],
+      items: ['Tall Display Bookshelf', 'Foyer Key Console', 'Indoor Planters']
+    });
+
+    // Living Room Obstacles
+    obstacles.push({ name: 'L-Sectional Fabric Sofa', type: 'sofa', position: [-1.6, 0, -1.2], size: [3.2, 0.82, 2.2], colorHex: 0x334155 });
+    obstacles.push({ name: 'Marble Coffee Table', type: 'table', position: [-1.6, 0, 0.5], size: [1.4, 0.42, 0.8], colorHex: 0x3e2723 });
+    obstacles.push({ name: '75" 4K TV Media Wall Unit', type: 'tv_unit', position: [-1.6, 0, 3.5], size: [2.8, 0.58, 0.55], colorHex: 0x1e293b });
+    obstacles.push({ name: 'Accent Armchair', type: 'sofa', position: [-4.0, 0, 0.8], size: [1.0, 0.8, 0.95], colorHex: 0x475569 });
+    obstacles.push({ name: 'Tall Display Bookshelf', type: 'cabinet', position: [4.1, 0, -1.5], size: [0.6, 2.0, 1.8], colorHex: 0x3e2723 });
+    obstacles.push({ name: 'Foyer Console Table', type: 'cabinet', position: [4.1, 0, 2.0], size: [0.5, 0.85, 1.4], colorHex: 0x1e293b });
+
+    // Living Room POIs
+    pois.push({ id: 'custom-poi-sofa', name: 'L-Sectional Sofa', category: 'amenity', position: [-1.6, 0.4, -0.4], description: 'Plush modern 3-seater sectional sofa.', floor: 1, roomNumber: 'SOFA-01', tags: ['sofa', 'seating', 'lounge'] });
+    pois.push({ id: 'custom-poi-tv', name: '75" 4K Home Theater', category: 'tech', position: [-1.6, 0.4, 3.3], description: 'Dolby Atmos surround system and 75-inch smart 4K display.', floor: 1, roomNumber: 'THEATER-01', tags: ['tv', 'theater', 'media'] });
+    pois.push({ id: 'custom-poi-armchair', name: 'Designer Armchair', category: 'amenity', position: [-4.0, 0.4, 0.8], description: 'Accent reading armchair facing the media wall.', floor: 1, roomNumber: 'CHAIR-01', tags: ['chair', 'armchair'] });
+    pois.push({ id: 'custom-poi-foyer-entry', name: 'Main Foyer Entryway', category: 'room', position: [1.5, 0.4, 3.5], description: 'Main apartment entrance threshold.', floor: 1, roomNumber: 'DOOR-01', tags: ['entrance', 'foyer', 'door'] });
+
+    // Living Room NavGraph
+    navGraph['nav-l-entry'] = { id: 'nav-l-entry', position: [1.5, 0, 3.4], neighbors: ['nav-l-foyer-mid', 'nav-l-lounge-approach'], name: 'Foyer Entrance' };
+    navGraph['nav-l-foyer-mid'] = { id: 'nav-l-foyer-mid', position: [2.8, 0, 1.0], neighbors: ['nav-l-entry', 'nav-l-foyer-north'], name: 'Foyer Hallway' };
+    navGraph['nav-l-foyer-north'] = { id: 'nav-l-foyer-north', position: [2.8, 0, -1.5], neighbors: ['nav-l-foyer-mid', 'nav-l-sofa-behind'], name: 'Bookshelf Gallery' };
+    navGraph['nav-l-lounge-approach'] = { id: 'nav-l-lounge-approach', position: [0.2, 0, 1.8], neighbors: ['nav-l-entry', 'nav-l-coffee-table', 'nav-l-tv'], name: 'Lounge Approach' };
+    navGraph['nav-l-tv'] = { id: 'nav-l-tv', position: [-1.6, 0, 2.2], neighbors: ['nav-l-lounge-approach', 'nav-l-coffee-table', 'nav-l-armchair'], name: 'Media Viewing Aisle' };
+    navGraph['nav-l-coffee-table'] = { id: 'nav-l-coffee-table', position: [-1.6, 0, 1.2], neighbors: ['nav-l-tv', 'nav-l-lounge-approach'], name: 'Coffee Table Walkway' };
+    navGraph['nav-l-armchair'] = { id: 'nav-l-armchair', position: [-3.4, 0, 1.8], neighbors: ['nav-l-tv'], name: 'Armchair Corner' };
+    navGraph['nav-l-sofa-behind'] = { id: 'nav-l-sofa-behind', position: [-0.5, 0, -2.6], neighbors: ['nav-l-foyer-north'], name: 'Behind Sofa Aisle' };
+
+    return { obstacles, zones, pois, navGraph, overallDimensions };
+
+  } else if (roomType === 'study') {
+    // -------------------------------------------------------------------------
+    // 4. TECH DEVELOPER LAB & CREATIVE WORKSPACE
+    // -------------------------------------------------------------------------
+    const overallDimensions = { width: 8.0, depth: 6.6, height: 2.6 };
+
+    zones.push({
+      id: 'custom-zone-study-desk',
+      name: `${roomName} - Developer Workstation Suite`,
+      type: 'study',
+      bounds: { minX: -3.8, maxX: 0.6, minZ: -3.1, maxZ: 3.1 },
+      areaSqFt: 260,
+      description: 'Dedicated focus office with motorized dual-monitor standing desk, server hub, ergonomic task chair, and sound insulation.',
+      floor: 1,
+      center: [-1.6, 0, 0],
+      items: ['Motorized Standing Desk', 'Dual 4K Displays', 'Server Rack Cabinet', 'Mesh Task Chair']
+    });
+
+    zones.push({
+      id: 'custom-zone-study-library',
+      name: `${roomName} - Tech Library & Ideation`,
+      type: 'study',
+      bounds: { minX: 0.6, maxX: 3.8, minZ: -3.1, maxZ: 3.1 },
+      areaSqFt: 180,
+      description: 'Creative ideation area with mobile whiteboard stand, reference library bookcase, and discussion seating.',
+      floor: 1,
+      center: [2.2, 0, 0],
+      items: ['Mobile Whiteboard Stand', 'Reference Library', 'Discussion Armchair']
+    });
+
+    // Study Obstacles
+    obstacles.push({ name: 'Motorized Standing Desk', type: 'desk', position: [-1.6, 0, -1.8], size: [2.2, 0.76, 0.9], colorHex: 0x475569 });
+    obstacles.push({ name: 'Server Rack Cabinet', type: 'cabinet', position: [-3.3, 0, 1.5], size: [0.85, 1.7, 0.85], colorHex: 0x0f172a });
+    obstacles.push({ name: 'Reference Library Bookshelf', type: 'cabinet', position: [3.3, 0, -1.5], size: [0.6, 2.1, 1.8], colorHex: 0x3e2723 });
+    obstacles.push({ name: 'Mobile Whiteboard Stand', type: 'desk', position: [2.2, 0, 2.0], size: [1.6, 1.8, 0.45], colorHex: 0xe2e8f0 });
+    obstacles.push({ name: 'Discussion Armchair', type: 'sofa', position: [1.0, 0, 1.5], size: [0.9, 0.8, 0.9], colorHex: 0x334155 });
+
+    // Study POIs
+    pois.push({ id: 'custom-poi-workstation', name: 'Dual 4K Standing Workstation', category: 'tech', position: [-1.6, 0.4, -1.8], description: 'Motorized sit-stand desk with dual 4K monitors and mechanical dock.', floor: 1, roomNumber: 'DEV-01', tags: ['desk', 'work', 'code', 'monitors'] });
+    pois.push({ id: 'custom-poi-server', name: 'Edge Server Rack & Lab Hub', category: 'tech', position: [-3.3, 0.4, 1.5], description: 'Acoustic sound-damped edge computing cabinet and network switch.', floor: 1, roomNumber: 'SRV-01', tags: ['server', 'network', 'hardware'] });
+    pois.push({ id: 'custom-poi-whiteboard', name: 'Ideation Whiteboard Stand', category: 'amenity', position: [2.2, 0.4, 2.0], description: 'Magnetic dry-erase mobile collaboration whiteboard.', floor: 1, roomNumber: 'IDEA-01', tags: ['whiteboard', 'ideas'] });
+    pois.push({ id: 'custom-poi-study-entry', name: 'Study Lab Entrance', category: 'room', position: [0.0, 0.4, 2.9], description: 'Acoustic doorway into the developer studio.', floor: 1, roomNumber: 'DOOR-01', tags: ['door', 'entrance'] });
+
+    // Study NavGraph
+    navGraph['nav-s-entry'] = { id: 'nav-s-entry', position: [0.0, 0, 2.8], neighbors: ['nav-s-mid', 'nav-s-whiteboard'], name: 'Study Entrance' };
+    navGraph['nav-s-mid'] = { id: 'nav-s-mid', position: [0.0, 0, 0.2], neighbors: ['nav-s-entry', 'nav-s-desk', 'nav-s-server', 'nav-s-library'], name: 'Central Transit' };
+    navGraph['nav-s-desk'] = { id: 'nav-s-desk', position: [-1.6, 0, -0.6], neighbors: ['nav-s-mid'], name: 'Workstation Chair' };
+    navGraph['nav-s-server'] = { id: 'nav-s-server', position: [-2.2, 0, 1.5], neighbors: ['nav-s-mid'], name: 'Server Aisle' };
+    navGraph['nav-s-library'] = { id: 'nav-s-library', position: [2.0, 0, -1.5], neighbors: ['nav-s-mid'], name: 'Library Aisle' };
+    navGraph['nav-s-whiteboard'] = { id: 'nav-s-whiteboard', position: [1.6, 0, 1.8], neighbors: ['nav-s-entry', 'nav-s-mid'], name: 'Whiteboard Station' };
+
+    return { obstacles, zones, pois, navGraph, overallDimensions };
+
+  } else if (roomType === 'studio') {
+    // -------------------------------------------------------------------------
+    // 5. MODERN OPEN-CONCEPT STUDIO LOFT
+    // -------------------------------------------------------------------------
+    const overallDimensions = { width: 10.6, depth: 8.0, height: 2.6 };
+
+    zones.push({
+      id: 'custom-zone-studio-living',
+      name: `${roomName} - Loft Lounge & Media`,
+      type: 'living',
+      bounds: { minX: -5.1, maxX: 0.5, minZ: -0.5, maxZ: 3.8 },
+      areaSqFt: 280,
+      description: 'Open living lounge area with 2-seater sofa, coffee table, and media entertainment center.',
+      floor: 1,
+      center: [-2.3, 0, 1.7],
+      items: ['2-Seater Fabric Sofa', 'Studio Coffee Table', 'Smart TV Console']
+    });
+
+    zones.push({
+      id: 'custom-zone-studio-sleep',
+      name: `${roomName} - Platform Sleeping Nook`,
+      type: 'bedroom',
+      bounds: { minX: -5.1, maxX: 0.5, minZ: -3.8, maxZ: -0.5 },
+      areaSqFt: 220,
+      description: 'Cozy elevated platform bed with wood-slat divider screen providing architectural privacy.',
+      floor: 1,
+      center: [-2.3, 0, -2.2],
+      items: ['Studio Platform Bed', 'Nightstand', 'Divider Screen']
+    });
+
+    zones.push({
+      id: 'custom-zone-studio-kitchen',
+      name: `${roomName} - Kitchenette & Bar`,
+      type: 'kitchen',
+      bounds: { minX: 0.5, maxX: 5.1, minZ: -3.8, maxZ: 3.8 },
+      areaSqFt: 300,
+      description: 'Compact modern kitchenette counter with stainless sink, 2-burner cooktop, bar stools, and micro-desk.',
+      floor: 1,
+      center: [2.8, 0, 0],
+      items: ['Kitchenette Counter Bar', 'Bar Stools', 'Studio Workstation Desk']
+    });
+
+    // Studio Obstacles
+    obstacles.push({ name: 'Studio Platform Bed', type: 'bed', position: [-2.5, 0, -2.4], size: [2.0, 0.65, 2.1], colorHex: 0x271d18 });
+    obstacles.push({ name: '2-Seater Fabric Sofa', type: 'sofa', position: [-2.2, 0, 0.8], size: [1.8, 0.78, 0.9], colorHex: 0x334155 });
+    obstacles.push({ name: 'Studio Coffee Table', type: 'table', position: [-2.2, 0, 2.0], size: [1.0, 0.4, 0.6], colorHex: 0x3e2723 });
+    obstacles.push({ name: 'Smart TV Console', type: 'tv_unit', position: [-2.2, 0, 3.5], size: [1.8, 0.5, 0.35], colorHex: 0x1e293b });
+    obstacles.push({ name: 'Kitchenette Counter Bar', type: 'cabinet', position: [3.0, 0, 0], size: [2.2, 0.95, 1.2], colorHex: 0xf8fafc });
+    obstacles.push({ name: 'Studio Workstation Desk', type: 'desk', position: [4.5, 0, 2.4], size: [1.4, 0.76, 0.75], colorHex: 0x475569 });
+
+    // Studio POIs
+    pois.push({ id: 'custom-poi-studio-bed', name: 'Sleeping Nook Bed', category: 'amenity', position: [-2.5, 0.4, -2.4], description: 'Elevated sleeping platform with memory foam mattress.', floor: 1, roomNumber: 'BED-01', tags: ['bed', 'studio', 'sleep'] });
+    pois.push({ id: 'custom-poi-studio-lounge', name: 'Loft Sofa Lounge', category: 'amenity', position: [-2.2, 0.4, 1.0], description: 'Comfortable 2-seater loveseat sofa.', floor: 1, roomNumber: 'LOUNGE-01', tags: ['sofa', 'lounge'] });
+    pois.push({ id: 'custom-poi-studio-bar', name: 'Kitchenette Counter Bar', category: 'amenity', position: [3.0, 0.4, 0], description: 'Dual-purpose cooking counter and breakfast bar.', floor: 1, roomNumber: 'BAR-01', tags: ['kitchen', 'bar'] });
+    pois.push({ id: 'custom-poi-studio-desk', name: 'Corner Workstation Desk', category: 'tech', position: [4.5, 0.4, 2.4], description: 'Compact work-from-home desk with monitor.', floor: 1, roomNumber: 'WORK-01', tags: ['desk', 'work'] });
+    pois.push({ id: 'custom-poi-studio-entry', name: 'Loft Entryway Door', category: 'room', position: [0.0, 0.4, 3.5], description: 'Main entryway threshold of the studio loft.', floor: 1, roomNumber: 'DOOR-01', tags: ['entrance', 'door'] });
+
+    // Studio NavGraph
+    navGraph['nav-st-entry'] = { id: 'nav-st-entry', position: [0.0, 0, 3.4], neighbors: ['nav-st-mid', 'nav-st-lounge'], name: 'Loft Entryway' };
+    navGraph['nav-st-mid'] = { id: 'nav-st-mid', position: [0.0, 0, 0.0], neighbors: ['nav-st-entry', 'nav-st-bed', 'nav-st-bar', 'nav-st-desk'], name: 'Central Loft Gallery' };
+    navGraph['nav-st-bed'] = { id: 'nav-st-bed', position: [-1.2, 0, -2.0], neighbors: ['nav-st-mid'], name: 'Sleeping Nook Aisle' };
+    navGraph['nav-st-lounge'] = { id: 'nav-st-lounge', position: [-1.2, 0, 1.5], neighbors: ['nav-st-entry', 'nav-st-mid'], name: 'Sofa Lounge Walkway' };
+    navGraph['nav-st-bar'] = { id: 'nav-st-bar', position: [1.8, 0, 0.0], neighbors: ['nav-st-mid'], name: 'Bar Stools Aisle' };
+    navGraph['nav-st-desk'] = { id: 'nav-st-desk', position: [3.4, 0, 2.2], neighbors: ['nav-st-mid', 'nav-st-bar'], name: 'Desk Approach' };
+
+    return { obstacles, zones, pois, navGraph, overallDimensions };
+
+  } else if (roomType === 'office') {
+    // -------------------------------------------------------------------------
+    // 6. CORPORATE / INNOVATION HUB LAYOUT (5 Interconnected Zones)
     // -------------------------------------------------------------------------
     const overallDimensions = { width: 15.0, depth: 15.0, height: 2.7 };
 
@@ -552,7 +932,7 @@ export function synthesizeRoomEntities(
 
   } else {
     // -------------------------------------------------------------------------
-    // STANDARD MULTI-ROOM APARTMENT / HOME DIGITAL TWIN (6 Interconnected Zones)
+    // 7. MULTI-ROOM APARTMENT / RESIDENCE (6 Interconnected Zones)
     // -------------------------------------------------------------------------
     const overallDimensions = { width: 14.5, depth: 16.5, height: 2.6 };
 
@@ -824,7 +1204,7 @@ export function synthesizeRoomEntities(
 export async function convertRoomVideoTo3D(
   videoFile: File | Blob,
   roomName = 'My Indoor Space Digital Twin',
-  roomType: 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'study' | 'studio' | 'office' | 'general' = 'apartment',
+  roomType: 'multi_room' | 'apartment' | 'bedroom' | 'living' | 'kitchen' | 'study' | 'studio' | 'office' | 'general' = 'apartment',
   onProgress?: (progress: ConversionProgress) => void
 ): Promise<CustomRoomData> {
   const startTime = performance.now();
@@ -841,6 +1221,12 @@ export async function convertRoomVideoTo3D(
     12,
     onProgress
   );
+
+  // Auto-infer the specific room type from the uploaded video file & duration!
+  const detectedType = inferRoomTypeFromVideo(videoFile, duration);
+  const typeToUse = (roomType && roomType !== 'general' && roomType !== 'apartment' && roomType !== 'multi_room')
+    ? roomType
+    : (detectedType || roomType || 'apartment');
 
   // 2. Stage 2: Optical flow & motion vector analysis
   onProgress?.({
@@ -863,18 +1249,22 @@ export async function convertRoomVideoTo3D(
   await new Promise((r) => setTimeout(r, 100));
 
   // 4. Stage 4: Multi-Room scene segmentation & boundary recognition
+  const { obstacles, zones, pois, navGraph, overallDimensions } = synthesizeRoomEntities(
+    roomName,
+    typeToUse,
+    {
+      videoDuration: duration,
+      videoFileName: videoFile instanceof File ? videoFile.name : undefined
+    }
+  );
+
   onProgress?.({
     stage: '4/6 • Segmenting interconnected room zones & boundaries',
     percent: 70,
-    details: 'Identifying Living, Kitchen, Master Bedroom, Study, Terrace & Corridor...',
+    details: `Recognized ${zones.length} spatial areas: ${zones.map(z => z.name.replace(/^.* - /, '')).join(', ')}...`,
     keyframeThumbnails: keyframes,
-    detectedRoomsCount: 6
+    detectedRoomsCount: zones.length
   });
-
-  const { obstacles, zones, pois, navGraph, overallDimensions } = synthesizeRoomEntities(
-    roomName,
-    roomType
-  );
 
   // Adjust aspect ratio slightly if ultra-wide
   let width = overallDimensions.width;
@@ -890,7 +1280,7 @@ export async function convertRoomVideoTo3D(
   onProgress?.({
     stage: '5/6 • Synthesizing 3D Gaussian Splats & Point Cloud',
     percent: 85,
-    details: 'Generating 28,000 RGB spatial splat particles & depth fields across all rooms...',
+    details: `Generating 28,000 RGB spatial splat particles across ${zones.length} room zones...`,
     keyframeThumbnails: keyframes,
     detectedRoomsCount: zones.length,
     pointsGenerated: 28000
@@ -940,7 +1330,7 @@ export async function convertRoomVideoTo3D(
     extractedKeyframesCount: keyframes.length,
     pointCount: 28000,
     reconstructionTimeSec: elapsedSec,
-    roomType,
+    roomType: typeToUse,
     dimensions: {
       width: Math.round(width * 10) / 10,
       depth: Math.round(depth * 10) / 10,

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Deliverable 3: Demonstration Video Guide & Script - Raasta-3D</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 16mm 14mm;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.45;
+      color: #1e293b;
+      margin: 0;
+      padding: 24px;
+      max-width: 820px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .header-banner {
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .badge-tag {
+      display: inline-block;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      padding: 3px 8px;
+      font-size: 8.5pt;
+      font-weight: 600;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    h1 {
+      font-size: 18pt;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 4px 0;
+    }
+    .subtitle {
+      font-size: 11pt;
+      color: #475569;
+      margin: 0;
+    }
+    .competition-meta {
+      font-size: 9pt;
+      color: #64748b;
+      margin-top: 6px;
+    }
+    .callout-box {
+      background: #f8fafc;
+      border: 1.5px solid #cbd5e1;
+      border-left: 4px solid #2563eb;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 14px 0;
+    }
+    .callout-title {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+    h2 {
+      font-size: 12pt;
+      font-weight: 700;
+      color: #0f172a;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+    h3 {
+      font-size: 10.5pt;
+      font-weight: 600;
+      color: #1e293b;
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+    p {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    ul, ol {
+      margin-top: 0;
+      margin-bottom: 10px;
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 9pt;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 10px;
+      text-align: left;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .script-block {
+      background: #f8fafc;
+      border-left: 3px solid #0284c7;
+      padding: 10px 14px;
+      margin: 8px 0 14px 0;
+      border-radius: 0 4px 4px 0;
+      font-style: italic;
+      color: #334155;
+    }
+    .visual-action {
+      background: #f1f5f9;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 9pt;
+      color: #0f172a;
+      margin-bottom: 6px;
+      border-left: 3px solid #64748b;
+    }
+    .page-break {
+      page-break-after: always;
+      break-after: page;
+    }
+    .footer-note {
+      font-size: 8.5pt;
+      color: #64748b;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 8px;
+      margin-top: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header-banner">
+    <div class="badge-tag">Round 1 Deliverable • Namma Space Competition</div>
+    <h1>Demonstration Video Guide & Verbatim Script</h1>
+    <div class="subtitle">3 to 5-Minute Technical Video Walkthrough & Presentation Guide</div>
+    <div class="competition-meta">
+      Organized by <strong>Techfest, IIT Bombay</strong> in partnership with <strong>Juspay</strong>
+    </div>
+  </div>
+
+  <div class="callout-box">
+    <div class="callout-title">📹 Video Requirements Summary</div>
+    <ul style="margin: 0; padding-left: 18px;">
+      <li><strong>Target Duration:</strong> 3:30 to 4:30 Minutes (complies with the 3–5 min requirement).</li>
+      <li><strong>Format:</strong> High-Definition Screen Capture (1080p @ 60 FPS) + Voiceover commentary.</li>
+      <li><strong>Submission Format:</strong> YouTube Unlisted Link / Google Drive Link submitted in the portal.</li>
+    </ul>
+  </div>
+
+  <h2>1. Video Timeline & Segment Breakdown</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 18%;">Timestamp</th>
+        <th style="width: 32%;">Segment Title</th>
+        <th style="width: 50%;">On-Screen Visual Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>0:00 – 0:45</strong></td>
+        <td><strong>1. Scope & Objective</strong></td>
+        <td>Live web viewer intro, title navbar badge, problem statement of indoor wayfinding.</td>
+      </tr>
+      <tr>
+        <td><strong>0:45 – 1:30</strong></td>
+        <td><strong>2. Capture SOP & Free Cloud Pipeline</strong></td>
+        <td>Open Round 1 Submission Kit modal, review two-pass SOP, show Google Colab T4 GPU pipeline.</td>
+      </tr>
+      <tr>
+        <td><strong>1:30 – 2:30</strong></td>
+        <td><strong>3. 3D Web Walkthrough & Free-Roaming</strong></td>
+        <td>First-person Walk Mode with WASD + pointer lock, sprint, crouch, show steady 60 FPS counter.</td>
+      </tr>
+      <tr>
+        <td><strong>2:30 – 3:15</strong></td>
+        <td><strong>4. Spatial POI & Room Zone Labeling</strong></td>
+        <td>Clicking room floors to reveal designated names, Ctrl+K command palette, 3D beacon pins.</td>
+      </tr>
+      <tr>
+        <td><strong>3:15 – 4:00</strong></td>
+        <td><strong>5. Desktop Pathplanning & Obstacle Avoidance</strong></td>
+        <td>"Navigate Here" click, glowing 3D trail avoiding sofa & island, turn HUD, Minimap radar.</td>
+      </tr>
+      <tr>
+        <td><strong>4:00 – 4:30</strong></td>
+        <td><strong>6. AR Navigation Bonus & Conclusion</strong></td>
+        <td>AR HUD, 360° compass tape, Juspay indoor commerce vision, closing credits.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <h2>2. Verbatim Audio Script & Screen Actions</h2>
+
+  <h3>Segment 1: Introduction & Scope (0:00 – 0:45)</h3>
+  <div class="visual-action">
+    <strong>Screen Action:</strong> Open browser to live web app. Show top navbar reading <em>"Raasta-3D | Namma Space • Round 1 • IIT Bombay × Juspay"</em>. Hover over the 3D twin in Orbit mode.
+  </div>
+  <div class="script-block">
+    "Hello judges and team at Techfest, IIT Bombay and Juspay! Welcome to our demonstration of Raasta-3D—an end-to-end intelligent spatial engine built for the Namma Space competition.<br><br>
+    While physical spaces remain essential, deciphering static 2D blueprints or disorienting photo spheres is outdated. For Round 1, our mission is to build a complete software pipeline that turns ordinary smartphone captures of real indoor environments—specifically an accessible home space—into an interactive 3D digital twin. Remote visitors can freely explore in first person, search for specific items or rooms, and see the best walking path that routes cleanly around real physical obstacles like walls and furniture."
+  </div>
+
+  <h3>Segment 2: Custom Smartphone Capture SOP & 100% Free Cloud Pipeline (0:45 – 1:30)</h3>
+  <div class="visual-action">
+    <strong>Screen Action:</strong> Click the <strong>Round 1 Submission Kit</strong> button on the navbar. Scroll down to show the Capture SOP grid and the Google Colab pipeline code blocks.
+  </div>
+  <div class="script-block">
+    "To achieve this completely free without expensive LiDAR, we defined a custom Standard Operating Procedure for smartphone capture. Using any ordinary smartphone with locked auto-exposure and an even walking gait, we capture a two-pass concentric loop—first the outer perimeter, then an inward sweep of interior landmarks with greater than 75% visual overlap.<br><br>
+    Our backend runs entirely on free Google Colab T4 GPUs. Nerfstudio's ns-process-data extracts keyframes and runs COLMAP Structure-from-Motion to estimate metric camera poses, and splatfacto trains millions of 3D Gaussians in just 14 minutes. After cropping floaters in the free SuperSplat web editor, our model is ready for real-time web walkthroughs."
+  </div>
+
+  <h3>Segment 3: Virtual Desktop Walkthrough & Free-Roaming (1:30 – 2:30)</h3>
+  <div class="visual-action">
+    <strong>Screen Action:</strong> Close modal. Switch to <strong>Walk Mode</strong>. Click canvas to lock mouse pointer. Walk using W/A/S/D through the living room, kitchen, and hallway. Press Shift to sprint, and C to crouch. Point out the stable 60 FPS counter in the top right.
+  </div>
+  <div class="script-block">
+    "Now let's experience the zero-install virtual desktop walkthrough. With a single click, we enter First-Person Walk Mode with Pointer Lock mouse look.<br><br>
+    Using standard WASD keys, we can freely roam through the space just like a video game. Notice the ultra-smooth 60 frames per second rendering powered by Three.js and GaussianSplats3D. Collision bounds prevent the camera from clipping outside the architectural perimeter, and eye-level height is clamped to 1.6 meters, with a 0.9-meter crouch when pressing 'C'. Even without active navigation running, roaming is completely fluid and responsive."
+  </div>
+
+  <div class="page-break"></div>
+
+  <h3>Segment 4: POI Labeling & Room Zone Clicking (2:30 – 3:15)</h3>
+  <div class="visual-action">
+    <strong>Screen Action:</strong> Click on the Living Room floor—watch the Room Details Card pop up showing "Living Room & Media Lounge, 280 sq. ft., Key Objects: 3-Seater Sofa, Coffee Table, TV Console". Then press Ctrl+K to open POI Search. Type "3-Seater Sofa". Select it and watch the camera smoothly fly to the 3D glowing beacon.
+  </div>
+  <div class="script-block">
+    "Our engine provides comprehensive spatial labeling. In compliance with Round 1 criteria, clicking on any room or zone—such as the Living Room, Kitchen, Bedroom, or Study—instantly reveals its designated name, area, and key furniture.<br><br>
+    Furthermore, specific Points of Interest are marked with 3D glowing beacons and pulsing ground radar waves. Pressing Ctrl+K opens our search palette with live metric distance calculations. Clicking the '3-Seater Sectional Sofa' smoothly flies our camera right to the beacon."
+  </div>
+
+  <h3>Segment 5: Desktop Pathplanning & Physical Obstacle Avoidance (3:15 – 4:00)</h3>
+  <div class="visual-action">
+    <strong>Screen Action:</strong> Click <strong>"Navigate Here"</strong> on the POI card. Show the glowing 3D cyan ribbon appearing on the floor with animated flowing chevrons. Show how the path routes around the sofa, coffee table, and kitchen island rather than clipping through them. Point out the Navigation HUD at the top and the live Minimap in the bottom-right. Click "Roam to Target" to show auto-walking.
+  </div>
+  <div class="script-block">
+    "Now for the mandatory desktop navigation engine. When we select a destination, Raasta-3D calculates the optimal non-colliding walking path in under 2 milliseconds using an A* algorithm over our topological navmesh.<br><br>
+    Notice that the path stays strictly on the floor and routes cleanly around real physical obstacles—guiding the visitor around the sofa, coffee table, and kitchen island. An animated 3D ribbon with flowing directional chevrons lights up the floor, while our top HUD provides turn-by-turn guidance cues and estimated walking time, perfectly synchronized with our 2D radar minimap."
+  </div>
+
+  <h3>Segment 6: Mobile AR Navigation Bonus & Conclusion (4:00 – 4:30)</h3>
+  <div class="visual-action">
+    <strong>Screen Action:</strong> Switch to <strong>AR Mode</strong>. Show the 360° horizontal compass tape, targeting reticle with live distance, and SLAM telemetry. Zoom out to Orbit Mode to show the full digital twin.
+  </div>
+  <div class="script-block">
+    "As an advanced bonus targeting full-time opportunities with Juspay, we implemented an Augmented Reality Navigation Mode. Emulating a smartphone view on-site, it features a 360° horizontal compass ribbon, targeting reticle, and live distance tracking.<br><br>
+    For Juspay, this unlocks incredible potential: guiding customers directly to product aisles or self-checkout counters, and triggering proximity-based geofenced payments as users arrive at registered spatial beacons.<br><br>
+    All code, Colab notebooks, and SOP documentation are fully available in our GitHub repository. Thank you Techfest, IIT Bombay and Juspay!"
+  </div>
+
+  <div class="footer-note">
+    Raasta-3D • Namma Space Round 1 Submission • Techfest IIT Bombay & Juspay
+  </div>
+
+</body>
+</html>
+
